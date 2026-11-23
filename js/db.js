@@ -43,8 +43,8 @@ const DB={
 DB.paySubscription=async function(subId,expectedDate,viaQuickAdd){
   const db=await openDB();
   return new Promise((resolve,reject)=>{
-    const t=db.transaction(['subscriptions','subscriptionPayments','expenses'],'readwrite');
-    t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Payment cancelled'));
+    const t=db.transaction(['subscriptions','subscriptionPayments','expenses'],'readwrite');let recorded=false;
+    t.oncomplete=()=>resolve(recorded);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Payment cancelled'));
     const subs=t.objectStore('subscriptions'),payments=t.objectStore('subscriptionPayments');
     const q=subs.get(subId);
     q.onsuccess=()=>{
@@ -54,6 +54,7 @@ DB.paySubscription=async function(subId,expectedDate,viaQuickAdd){
       check.onsuccess=()=>{
         if(check.result)return;
         const now=new Date(),date=now.toISOString();
+        recorded=true;
         payments.add({id:id(),subscriptionId:sub.id,cycleKey:cycle,billingDate:sub.nextBillingDate,amount:sub.amount,status:'paid',paidAt:date,via:viaQuickAdd?'quick-add':'slide'});
         t.objectStore('expenses').add({id:id(),amount:sub.amount,description:sub.name,category:'subscriptions',date,month:monthKey(now)});
         subs.put({...sub,nextBillingDate:nextBillingDate(sub.billingDay,sub.nextBillingDate)});
@@ -68,5 +69,20 @@ DB.restore=async function(data,replace){
     for(const name of stores){const store=t.objectStore(name);if(replace)store.clear();for(const row of data[name]){
       if(replace)store.put(row);else{const q=store.get(row[store.keyPath]);q.onsuccess=()=>{if(!q.result)store.add(row);};}
     }}
+  });
+};
+
+// Serialize duplicate checks with writes across tabs; no schema migration required.
+DB.addClient=async function(name){
+  name=String(name||'').trim();
+  if(!name)throw new Error('Enter a client name');
+  const db=await openDB();
+  return new Promise((resolve,reject)=>{
+    const t=db.transaction('clients','readwrite'),store=t.objectStore('clients');let created=false;
+    t.oncomplete=()=>resolve(created);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Client was not saved'));
+    const q=store.getAll();q.onsuccess=()=>{
+      if(q.result.some(c=>normalize(c.name)===normalize(name)))return;
+      store.add({id:id(),name,createdAt:new Date().toISOString()});created=true;
+    };
   });
 };
