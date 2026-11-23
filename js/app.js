@@ -15,7 +15,6 @@ async function initTheme(){
   await applyTheme(localStorage.getItem('easyfin-theme')||saved||(prefersDark?'dark':'light'));
 }
 function applyTheme(t){themeRevision++;t=t==='dark'?'dark':'light';document.documentElement.dataset.theme=t;localStorage.setItem('easyfin-theme',t);document.querySelector('meta[name="theme-color"]').content=t==='dark'?'#050506':'#f7f9fc';return DB.setting('theme',t).catch(()=>toast('Appearance could not be saved'));}
-$('#themeBtn').onclick=()=>{const cur=document.documentElement.dataset.theme==='dark'?'light':'dark';applyTheme(cur);};
 
 /* ---------- Navigation ---------- */
 function go(view){
@@ -25,13 +24,13 @@ function go(view){
   state.view=view;
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));
   document.querySelectorAll('.dock-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
-  const titles={home:['Quick Add','Pick up where you left off'],dashboard:['Dashboard','Your money at a glance'],balance:['Balance','Current month position'],income:['Income','Client-wise earnings'],expenses:['Expenses','Every rupee, accounted'],subs:['Subscriptions','Monthly recurring']};
-  const t=titles[view]||titles.home; $('#topEyebrow').textContent=t[0]; $('#topSub').textContent=t[1];
+  const titles={home:'Quick Add',dashboard:'Dashboard',balance:'Balance',income:'Income',expenses:'Expenses',subs:'Subscriptions'};
+  document.title=(titles[view]||'EasyFin')+' · EasyFin';
   refresh();
   window.scrollTo({top:0});
 }
 document.querySelectorAll('.dock-btn[data-view]').forEach(b=>b.onclick=()=>go(b.dataset.view));
-$('#dockSettings').onclick=()=>$('#profileBtn').click();
+$('#dockSettings').onclick=()=>openSettings();
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
 $('#dashExpenseCard').onclick=()=>go('expenses');
 $('#dashIncomeCard').onclick=()=>go('income');
@@ -101,7 +100,8 @@ function clearQA(){
 function paintCategory(){
   const cat=CATEGORIES.find(c=>c.id===qaCategory);
   $('#qaCategoryIcon').innerHTML=cat?cat.icon:'';
-  $('#qaCategoryText').textContent=cat?cat.label:$('#qaDesc').value.trim()?'Choose a category':'Category is detected as you type';
+  $('#qaCategoryText').textContent=cat?cat.label:'Choose category';
+  $('#qaCategoryBtn').hidden=!$('#qaDesc').value.trim();
   $('#qaCategoryBtn').classList.toggle('needs-category',!cat&&!!$('#qaDesc').value.trim());
 }
 function updateQAValidity(){
@@ -129,7 +129,7 @@ bindSlide($('#qaSlide'),trySaveExpense);
 function openCategoryPicker(description){
   if(!description||qaSaving)return;
   openSheet(`<button class="close-x" onclick="clearQA();closeSheet()">✕</button>
-    <h2>Choose a category</h2><p class="sub">${esc(description)}<br>Choose once, then slide to save. EasyFin remembers your choice.</p>
+    <h2>Choose a category</h2><p class="sub">${esc(description)}</p>
     <div class="cat-grid">${CATEGORIES.map(c=>`<button class="cat-pick" data-cat="${c.id}"><span class="ci">${c.icon}</span>${c.label}</button>`).join('')}</div>`);
   document.querySelectorAll('.cat-pick').forEach(b=>b.onclick=async()=>{
     document.querySelectorAll('.cat-pick').forEach(x=>x.disabled=true);
@@ -211,7 +211,7 @@ async function fillMonthSelects(){
   const ev=state.expMonth,iv=state.incMonth; em.innerHTML=opts; im.innerHTML=opts;
   em.value=[...em.options].some(o=>o.value===ev)?ev:'all'; im.value=[...im.options].some(o=>o.value===iv)?iv:'all';
 }
-$('#expenseMonth').onchange=e=>{state.expMonth=e.target.value;renderExpenses();};
+$('#expenseMonth').onchange=e=>{state.expMonth=e.target.value;state.period=null;renderExpenses();};
 $('#incomeMonth').onchange=e=>{state.incMonth=e.target.value;renderIncome();};
 
 async function renderExpenses(){
@@ -223,22 +223,27 @@ async function renderExpenses(){
   let list=await DB.all('expenses');
   if(state.period==='today')list=list.filter(e=>new Date(e.date).toDateString()===new Date().toDateString());
   if(state.period==='week'){const start=new Date();start.setHours(0,0,0,0);start.setDate(start.getDate()-((start.getDay()+6)%7));list=list.filter(e=>new Date(e.date)>=start&&new Date(e.date)<=new Date());}
-  if(state.expCat!=='all')list=list.filter(e=>e.category===state.expCat);
   if(state.expMonth!=='all')list=list.filter(e=>e.month===state.expMonth);
+  const periodRecords=list;
+  if(state.expCat!=='all')list=list.filter(e=>e.category===state.expCat);
+  const categoryLabel=CATEGORIES.find(c=>c.id===state.expCat)?.label;
+  const periodLabel=state.period==='today'?'Today':state.period==='week'?'This week':monthLabel(state.expMonth);
+  renderPeriodSummary('expense','Total expenses',periodLabel,periodRecords,list,categoryLabel);
   list.sort((a,b)=>new Date(b.date)-new Date(a.date));
   const groups={}; list.forEach(e=>{const d=new Date(e.date).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});(groups[d]=groups[d]||[]).push(e);});
   $('#expenseList').innerHTML=list.length?Object.entries(groups).map(([d,items])=>`<h3 class="transaction-day">${d}</h3>`+items.map(e=>txnHTML(e,'out')).join('')).join(''):'<p class="empty">No expenses match.</p>';
-  const subs=await DB.all('subscriptions'); const pending=subs.filter(s=>s.status==='active').length;
-  $('#subsBadge').textContent=pending?pending+' active':'';
 }
 
 async function renderIncome(){
   const clients=await DB.all('clients');
-  $('#clientChips').innerHTML=[{id:'all',name:'All Clients'},...clients].map(c=>`<button class="chip ${state.incClient===c.id?'active':''}" data-c="${c.id}">${esc(c.name)}</button>`).join('');
+  $('#clientChips').innerHTML=[{id:'all',name:'All Clients'},...clients].map(c=>`<button class="chip ${state.incClient===c.id?'active':''}" aria-pressed="${state.incClient===c.id}" data-c="${c.id}">${esc(c.name)}</button>`).join('');
   document.querySelectorAll('#clientChips .chip').forEach(b=>b.onclick=()=>{state.incClient=b.dataset.c;renderIncome();});
   let list=await DB.all('income');
-  if(state.incClient!=='all')list=list.filter(x=>x.clientId===state.incClient);
   if(state.incMonth!=='all')list=list.filter(x=>x.month===state.incMonth);
+  const periodRecords=list;
+  if(state.incClient!=='all')list=list.filter(x=>x.clientId===state.incClient);
+  const clientLabel=state.incClient==='all'?null:(clients.find(c=>c.id===state.incClient)?.name||'Selected client');
+  renderPeriodSummary('income','Total income',monthLabel(state.incMonth),periodRecords,list,clientLabel);
   list.sort((a,b)=>new Date(b.date)-new Date(a.date));
   $('#incomeList').innerHTML=list.length?list.map(x=>{
     const cl=clients.find(c=>c.id===x.clientId);
@@ -328,7 +333,7 @@ $('#addIncomeBtn').onclick=async()=>{
 };
 
 /* ---------- Profile / Settings ---------- */
-$('#profileBtn').onclick=()=>{
+function openSettings(){
   openSheet(`<button class="close-x" onclick="closeSheet()" style="position:absolute;top:14px;right:14px">✕</button>
     <h2>Profile &amp; Settings</h2><p class="sub">EasyFin v1.0 · All financial data stays on this device (IndexedDB).</p>
     <button class="ghost-btn" id="setExport">Export Backup</button>
@@ -407,7 +412,6 @@ function handleDeepLink(){
 
 /* ---------- Init ---------- */
 (async()=>{
-  $('#topEyebrow').textContent=greeting();
   await initTheme();
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
   handleDeepLink();
@@ -444,4 +448,13 @@ function openQuickAccessGuide(){
     try{await navigator.clipboard.writeText(location.origin+'/?action=quick-add');toast('Quick Add link copied');}
     catch{toast('Quick Add link: '+location.origin+'/?action=quick-add');}
   };
+}
+
+function renderPeriodSummary(prefix,title,period,periodRecords,filteredRecords,filterLabel){
+  const sum=records=>records.reduce((total,record)=>total+Number(record.amount),0);
+  $('#'+prefix+'TotalLabel').textContent=title+' · '+period;
+  $('#'+prefix+'Total').textContent=fmtINR(sum(periodRecords));
+  const filtered=$('#'+prefix+'FilteredTotal');
+  filtered.hidden=!filterLabel;
+  filtered.textContent=filterLabel?filterLabel+' · '+fmtINR(sum(filteredRecords)):'';
 }

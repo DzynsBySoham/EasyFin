@@ -185,3 +185,31 @@ html:not([data-view="home"]) main{padding-top:calc(env(safe-area-inset-top) + 28
 .quick-heading{display:none}
 html[data-quick-add="true"] .quick-heading{display:block}
 .access-heading{font-size:15px;font-weight:550;letter-spacing:-.02em;margin:22px 0 9px}
+
+/* Quiet page composition: one heading, one period total, complete visible filters. */
+main,html:not([data-view="home"]) main{padding-top:calc(env(safe-area-inset-top) + 28px)}
+.quick-page-heading{margin-bottom:24px}
+html[data-quick-add="true"] .quick-page-heading{display:none}
+.quick-card .slide{margin-top:22px}
+.category-status[hidden]{display:none}
+.category-status{margin-top:12px;padding:5px 2px;font-size:13px}
+.period-summary{padding:12px 0 28px;margin-bottom:0}
+.period-label{font-size:12px;color:var(--muted);line-height:1.5;font-weight:450}
+.period-value{font-size:clamp(36px,9vw,48px);line-height:1.15;letter-spacing:-.055em;font-weight:450;font-variant-numeric:tabular-nums;margin-top:8px;overflow-wrap:anywhere}
+.filtered-total{font-size:12px;font-weight:500;color:var(--blue);margin-top:12px;overflow-wrap:anywhere}
+.filter-panel{padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:22px;margin-bottom:18px}
+.filter-panel .chips{margin:0;padding:0;overflow:visible;gap:8px}
+#catChips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+#catChips .chip{width:100%;min-width:0;min-height:44px;padding:10px 6px;border-radius:12px;font-size:12px;font-weight:500;background:transparent;border:1px solid transparent;color:var(--muted)}
+#catChips .chip:first-child{grid-column:1/-1}
+#catChips .chip.active{background:var(--text);color:var(--bg);box-shadow:0 2px 6px #0000000a}
+#catChips .chip:hover:not(.active){background:var(--surface2);color:var(--text)}
+#clientChips{display:flex;flex-wrap:wrap}
+#clientChips .chip{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.4;border-radius:12px;padding:10px 14px;background:transparent;color:var(--muted);border-color:transparent}
+#clientChips .chip.active{background:var(--text);color:var(--bg)}
+.subscription-link{width:auto;max-width:100%;padding:8px 2px;margin:0 0 20px auto;gap:8px;border:0;font-size:12px;min-height:44px;color:var(--muted)}
+.subscription-link span:nth-child(2){flex:initial}
+#view-income #addIncomeBtn{margin-top:0}
+#view-income #addClientBtn{margin-bottom:20px}
+@media(min-width:380px){#catChips{grid-template-columns:repeat(4,minmax(0,1fr))}#catChips .chip:first-child{grid-column:auto}#catChips .chip:last-child{grid-column:span 2}}
+@media(prefers-reduced-motion:no-preference){.period-value{animation:viewIn .22s ease-out}}

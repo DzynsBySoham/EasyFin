@@ -33,9 +33,9 @@ test('focused theme persistence, small/landscape layouts and offline route',asyn
 });
 test('page headers and required filter order have no redundant branding or dot',async({page})=>{
   await page.goto('/?action=expenses');await page.locator('#skipSetup').click();
-  await expect(page.locator('#view-expenses h1')).toHaveText('Expenses');await expect(page.locator('.topbar')).toBeHidden();await expect(page.locator('#subsBadge')).toBeEmpty();
+  await expect(page.locator('#view-expenses h1')).toHaveText('Expenses');await expect(page.locator('.topbar')).toBeHidden();await expect(page.locator('#subsBadge')).toHaveCount(0);
   expect(await page.locator('#catChips button').allTextContents()).toEqual(['All','Food','Travel','Shopping','Movies','Gifts','Subscriptions']);
-  expect(await page.locator('#subsBadge').evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+  await expect(page.locator('#openSubsBtn')).toHaveText('Subscriptions›');
   await page.locator('#dockSettings').click();await expect(page.locator('#setTheme')).toBeVisible();
 });
 test('atomic client duplicate prevention across simultaneous writes and reload',async({page})=>{

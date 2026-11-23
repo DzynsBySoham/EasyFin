@@ -19,41 +19,23 @@
 </head>
 <body>
 <div id="app">
-  <!-- Top bar -->
-  <header class="topbar">
-    <button class="avatar-btn" id="profileBtn" aria-label="Profile and settings">
-      <span class="avatar" id="avatarInitial">E</span>
-    </button>
-    <div class="topbar-title">
-      <span class="topbar-eyebrow" id="topEyebrow">Good evening</span>
-      <span class="topbar-sub" id="topSub">Pick up where you left off</span>
-    </div>
-    <button class="icon-btn" id="themeBtn" aria-label="Toggle theme">◐</button>
-  </header>
-
   <main id="main">
     <!-- QUICK ADD / HOME -->
     <section class="view active" id="view-home">
-      <div class="hero-card">
-        <p class="hero-eyebrow">Quick Add</p>
-        <h1 class="hero-title">Add an expense<br><span>in seconds</span></h1>
-        <p class="hero-sub">Amount, what it was for — we handle the rest.</p>
-      </div>
+      <div class="section-head quick-page-heading"><h1>Quick Add</h1></div>
 
       <div class="quick-card" id="quickCard" aria-labelledby="quickTitle">
-        <div class="quick-heading"><span class="hero-eyebrow">PRIVATE · ON THIS DEVICE</span><h2 id="quickTitle">Quick Add</h2></div>
+        <div class="quick-heading"><h2 id="quickTitle">Quick Add</h2></div>
         <button class="close-x" id="quickClose" aria-label="Close quick add">✕</button>
         <label class="field-label" for="qaAmount">Amount (₹)</label>
         <input class="amount-input" id="qaAmount" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0" autocomplete="off">
         <label class="field-label" for="qaDesc">What was it for?</label>
         <input class="text-input" id="qaDesc" type="text" placeholder="e.g. McDonald's, Metro, Netflix…" autocomplete="off">
-        <button type="button" class="category-status" id="qaCategoryBtn" aria-haspopup="dialog"><span id="qaCategoryIcon"></span><span id="qaCategoryText">Category is detected as you type</span><span aria-hidden="true">⌄</span></button>
-        <p class="hint" id="qaHint">Choose a category when an item is unknown.</p>
+        <button type="button" class="category-status" id="qaCategoryBtn" aria-haspopup="dialog" aria-label="Choose category" hidden><span id="qaCategoryIcon"></span><span id="qaCategoryText"></span><span aria-hidden="true">⌄</span></button>
         <div class="slide" id="qaSlide" data-color="blue">
           <div class="slide-track"><span class="slide-label">Slide to Add</span></div>
           <div class="slide-thumb">›</div>
         </div>
-        <p class="slide-note">Slide fully to save. Use ✕ to discard.</p>
       </div>
 
       <div class="today-strip">
@@ -101,7 +83,6 @@
         <div class="row-between"><span>Expenses</span><strong id="balExpenses">₹0</strong></div>
         <div class="row-between total"><span>Net</span><strong id="balNet">₹0</strong></div>
       </div>
-      <p class="note">Balance always reflects the current calendar month. Use Expenses / Income filters for history.</p>
     </section>
 
     <!-- INCOME -->
@@ -110,7 +91,12 @@
         <h1>Income</h1>
         <select id="incomeMonth" class="month-select" aria-label="Month"></select>
       </div>
-      <div class="chips" id="clientChips"></div>
+      <div class="period-summary" aria-label="Income total">
+        <p class="period-label" id="incomeTotalLabel">Total income · All Time</p>
+        <p class="period-value" id="incomeTotal" aria-live="polite">₹0</p>
+        <p class="filtered-total" id="incomeFilteredTotal" hidden></p>
+      </div>
+      <div class="filter-panel"><div class="chips" id="clientChips" role="group" aria-label="Filter income by client"></div></div>
       <button class="primary-btn" id="addIncomeBtn">＋ Add Income</button>
       <button class="ghost-btn" id="addClientBtn">＋ Add Client</button>
       <div id="incomeList" class="txn-list"></div>
@@ -122,8 +108,13 @@
         <h1>Expenses</h1>
         <select id="expenseMonth" class="month-select" aria-label="Month"></select>
       </div>
-      <div class="chips" id="catChips"></div>
-      <button class="subscription-link" id="openSubsBtn"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8a8 8 0 0 1 14-2l2 2M20 3v5h-5M20 16a8 8 0 0 1-14 2l-2-2M4 21v-5h5"/></svg><span>Manage subscriptions</span><span id="subsBadge"></span><span aria-hidden="true">›</span></button>
+      <div class="period-summary" aria-label="Expense total">
+        <p class="period-label" id="expenseTotalLabel">Total expenses · All Time</p>
+        <p class="period-value" id="expenseTotal" aria-live="polite">₹0</p>
+        <p class="filtered-total" id="expenseFilteredTotal" hidden></p>
+      </div>
+      <div class="filter-panel"><div class="chips" id="catChips" role="group" aria-label="Filter expenses by category"></div></div>
+      <button class="subscription-link" id="openSubsBtn"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8a8 8 0 0 1 14-2l2 2M20 3v5h-5M20 16a8 8 0 0 1-14 2l-2-2M4 21v-5h5"/></svg><span>Subscriptions</span><span aria-hidden="true">›</span></button>
       <div id="expenseList" class="txn-list"></div>
     </section>
 
