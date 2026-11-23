@@ -6,12 +6,15 @@ let routeInitialized=false;
 let state={period:null,view:'home',expCat:'all',expMonth:'all',incClient:'all',incMonth:'all'};
 
 /* ---------- Theme ---------- */
+let themeRevision=0;
 async function initTheme(){
+  const revision=themeRevision;
   const saved=await DB.setting('theme');
+  if(revision!==themeRevision)return;
   const prefersDark=matchMedia('(prefers-color-scheme: dark)').matches;
-  applyTheme(saved||(prefersDark?'dark':'light'));
+  await applyTheme(localStorage.getItem('easyfin-theme')||saved||(prefersDark?'dark':'light'));
 }
-function applyTheme(t){document.documentElement.dataset.theme=t;localStorage.setItem('easyfin-theme',t);document.querySelector('meta[name="theme-color"]').content=t==='dark'?'#050506':'#f7f9fc';DB.setting('theme',t).catch(()=>toast('Appearance could not be saved'));}
+function applyTheme(t){themeRevision++;t=t==='dark'?'dark':'light';document.documentElement.dataset.theme=t;localStorage.setItem('easyfin-theme',t);document.querySelector('meta[name="theme-color"]').content=t==='dark'?'#050506':'#f7f9fc';return DB.setting('theme',t).catch(()=>toast('Appearance could not be saved'));}
 $('#themeBtn').onclick=()=>{const cur=document.documentElement.dataset.theme==='dark'?'light':'dark';applyTheme(cur);};
 
 /* ---------- Navigation ---------- */
@@ -84,7 +87,7 @@ async function trySaveExpense(){
   $('#qaAmount').disabled=true;$('#qaDesc').disabled=true;$('#quickClose').disabled=true;
   try{
     const matched=await findPendingSubscription(description,amount);
-    if(matched)await confirmSubscriptionPayment(matched,{viaQuickAdd:true});
+    if(matched){const recorded=await confirmSubscriptionPayment(matched,{viaQuickAdd:true});if(!recorded){toast('This subscription cycle has already been handled');return false;}}
     else await saveExpense({amount,description,category:qaCategory,recordId:qaDraftId});
     clearQA();await refresh();toast(matched?'Subscription payment saved':'Expense saved');return true;
   }finally{
@@ -154,8 +157,9 @@ async function findPendingSubscription(desc,amt){
   return null;
 }
 async function confirmSubscriptionPayment(sub,{viaQuickAdd=false}={}){
-  await DB.paySubscription(sub.id,sub.nextBillingDate,viaQuickAdd);
-  syncReminderMetadata();
+  const recorded=await DB.paySubscription(sub.id,sub.nextBillingDate,viaQuickAdd);
+  if(recorded)await syncReminderMetadata();
+  return recorded;
 }
 async function syncReminderMetadata(){
   // Queue minimal metadata for server reminders (name/amount/date only — never full history)
@@ -266,7 +270,7 @@ function openConfirmSheet(sub){
     <h2>${esc(sub.name)}</h2><p class="sub">${fmtINR(sub.amount)} due ${sub.nextBillingDate}. Slide to confirm you have paid.</p>
     <div class="slide" id="confirmSlide" data-color="blue"><div class="slide-track"><span class="slide-label">Slide to Confirm</span></div><div class="slide-thumb">›</div></div>
     <p class="slide-note">Closing without sliding records nothing.</p>`);
-  bindSlide($('#confirmSlide'),async()=>{await confirmSubscriptionPayment(sub);closeSheet();toast('Payment recorded ✓');refresh();});
+  bindSlide($('#confirmSlide'),async()=>{const recorded=await confirmSubscriptionPayment(sub);closeSheet();toast(recorded?'Payment recorded':'This billing cycle is already handled');refresh();return recorded;});
 }
 function openCancelSheet(sub){
   openSheet(`<button class="close-x" onclick="closeSheet()" style="position:absolute;top:14px;right:14px">✕</button>
@@ -329,6 +333,7 @@ $('#profileBtn').onclick=()=>{
     <h2>Profile &amp; Settings</h2><p class="sub">EasyFin v1.0 · All financial data stays on this device (IndexedDB).</p>
     <button class="ghost-btn" id="setExport">Export Backup</button>
     <button class="ghost-btn" id="setImport">Import Backup</button>
+    <button class="ghost-btn" id="setQuickAccess">Lock Screen &amp; Quick Add access</button>
     <button class="ghost-btn" id="setBackTap">Quick Setup · iPhone &amp; Back Tap</button>
     <button class="ghost-btn" id="setPush">Notification availability</button>
     <label class="field-label" for="setTheme">Appearance</label><select class="text-input" id="setTheme"><option value="light">Light</option><option value="dark">Dark</option></select>
@@ -337,6 +342,7 @@ $('#profileBtn').onclick=()=>{
   $('#setExport').onclick=exportBackup;
   $('#setImport').onclick=()=>$('#importFile').click();
   $('#setBackTap').onclick=openBackTapGuide;
+  $('#setQuickAccess').onclick=openQuickAccessGuide;
   $('#setPush').onclick=enablePush;
   $('#setTheme').value=document.documentElement.dataset.theme;$('#setTheme').onchange=e=>applyTheme(e.target.value);
   $('#importFile').onchange=e=>{if(e.target.files[0])importBackup(e.target.files[0]);};
@@ -360,7 +366,7 @@ async function importBackup(file){
     <button class="ghost-btn" id="impMerge">Merge (keep existing)</button>`);
   const apply=async(replace)=>{
     $('#impReplace').disabled=true;$('#impMerge').disabled=true;
-    try{await DB.restore(data,replace);await initTheme();}catch(e){toast('Restore failed; no changes were made.');$('#impReplace').disabled=false;$('#impMerge').disabled=false;return;}
+    try{await DB.restore(data,replace);const restoredTheme=await DB.setting('theme');if(restoredTheme)await applyTheme(restoredTheme);else await initTheme();}catch(e){toast('Restore failed; no changes were made.');$('#impReplace').disabled=false;$('#impMerge').disabled=false;return;}
     closeSheet();toast('Restored ✓');refresh();
   };
   $('#impReplace').onclick=()=>apply(true); $('#impMerge').onclick=()=>apply(false);
@@ -422,5 +428,20 @@ function guardSubmission(button,task){
     if(busy)return;busy=true;button.disabled=true;button.setAttribute('aria-busy','true');
     try{await task();}catch(error){console.error(error);toast('Could not save. Check device storage and retry.');}
     finally{busy=false;button.disabled=false;button.removeAttribute('aria-busy');}
+  };
+}
+
+function openQuickAccessGuide(){
+  openSheet(`<button class="close-x" onclick="closeSheet()">✕</button><h2>One action. Straight to Quick Add.</h2>
+    <p class="sub">The focused link opens only expense entry. It skips the Dashboard, onboarding and navigation. No financial details are included in the link.</p>
+    <button class="primary-btn" id="copyQuickLink">Copy Quick Add link</button>
+    <h3 class="access-heading">Lock Screen &amp; Control Center</h3>
+    <p class="sub">Requires the separate, signed EasyFin iOS companion (iOS 18+). Native source is provided in the repository, but it is not installed by this website or distributed through Vercel. After installing it with Xcode or an approved distribution channel, add EasyFin Quick Add from the iPhone’s control gallery. iOS handles authentication.</p>
+    <h3 class="access-heading">Shortcuts &amp; Action Button</h3>
+    <p class="sub">Without the companion, edit your existing EasyFin Quick Add Shortcut: use the copied link in its URL action, followed by Open URLs. Assign that Shortcut to an Action Button only if your iPhone has one. Back Tap is optional.</p>
+    <p class="note">Browser handoff can still open Safari or another default browser, not the installed PWA. The native launcher cannot share Safari/PWA IndexedDB or remove browser chrome. Check that the opened app sees your intended records. If it does not, use the installed EasyFin icon rather than creating records in a second container. No direct editable form on a securely locked screen is promised.</p>`);
+  $('#copyQuickLink').onclick=async()=>{
+    try{await navigator.clipboard.writeText(location.origin+'/?action=quick-add');toast('Quick Add link copied');}
+    catch{toast('Quick Add link: '+location.origin+'/?action=quick-add');}
   };
 }

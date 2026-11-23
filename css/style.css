@@ -184,3 +184,4 @@ html:not([data-view="home"]) main{padding-top:calc(env(safe-area-inset-top) + 28
 .toast{pointer-events:none}
 .quick-heading{display:none}
 html[data-quick-add="true"] .quick-heading{display:block}
+.access-heading{font-size:15px;font-weight:550;letter-spacing:-.02em;margin:22px 0 9px}

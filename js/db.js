@@ -43,8 +43,8 @@ const DB={
 DB.paySubscription=async function(subId,expectedDate,viaQuickAdd){
   const db=await openDB();
   return new Promise((resolve,reject)=>{
-    const t=db.transaction(['subscriptions','subscriptionPayments','expenses'],'readwrite');
-    t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Payment cancelled'));
+    const t=db.transaction(['subscriptions','subscriptionPayments','expenses'],'readwrite');let recorded=false;
+    t.oncomplete=()=>resolve(recorded);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Payment cancelled'));
     const subs=t.objectStore('subscriptions'),payments=t.objectStore('subscriptionPayments');
     const q=subs.get(subId);
     q.onsuccess=()=>{
@@ -54,6 +54,7 @@ DB.paySubscription=async function(subId,expectedDate,viaQuickAdd){
       check.onsuccess=()=>{
         if(check.result)return;
         const now=new Date(),date=now.toISOString();
+        recorded=true;
         payments.add({id:id(),subscriptionId:sub.id,cycleKey:cycle,billingDate:sub.nextBillingDate,amount:sub.amount,status:'paid',paidAt:date,via:viaQuickAdd?'quick-add':'slide'});
         t.objectStore('expenses').add({id:id(),amount:sub.amount,description:sub.name,category:'subscriptions',date,month:monthKey(now)});
         subs.put({...sub,nextBillingDate:nextBillingDate(sub.billingDay,sub.nextBillingDate)});

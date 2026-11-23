@@ -48,3 +48,20 @@ test('failed client save retains form and reports error instead of silent failur
   await page.evaluate(()=>{window.realClient=DB.addClient;DB.addClient=()=>Promise.reject(new Error('Controlled client write failure'));});await page.locator('#saveClient').click();await expect(page.locator('#toast')).toContainText('Could not save');await expect(page.locator('#clientName')).toHaveValue('Client');await expect(page.locator('#saveClient')).toBeEnabled();
   await page.evaluate(()=>DB.addClient=window.realClient);await page.locator('#saveClient').click();await expect(page.locator('#overlay')).toBeHidden();expect(await page.evaluate(()=>DB.all('clients').then(c=>c.length))).toBe(1);
 });
+test('normal and focused tabs share one browser-origin database, no separate expense store',async({page,context})=>{
+  await page.goto('/?action=quick-add');await amount(page);await expect(page.locator('#qaSlide')).toHaveAttribute('aria-disabled','false');
+  const other=await context.newPage();await other.goto('/?action=quick-add');expect((await records(other)).length).toBe(0);
+  await page.evaluate(()=>Promise.all([trySaveExpense(),trySaveExpense(),trySaveExpense()]));expect((await records(page)).length).toBe(1);
+  expect((await records(other)).length).toBe(1);await other.locator('#quickClose').click();await other.locator('[data-view="dashboard"]').click();await expect(other.locator('#dashExpenses')).toHaveText('₹145');
+  expect(await page.evaluate(()=>indexedDB.databases().then(d=>d.map(x=>x.name)))).toEqual(['easyfin']);
+});
+test('clients and income guard rapid duplicate saves and persist after refresh',async({page})=>{
+  await page.goto('/?action=quick-add');await page.locator('#quickClose').click();await page.locator('[data-view="income"]').click();await page.locator('#addClientBtn').click();await page.locator('#clientName').fill('Agency');
+  await page.evaluate(()=>{document.querySelector('#saveClient').click();document.querySelector('#saveClient').click();});await expect(page.locator('#overlay')).toBeHidden();
+  expect(await page.evaluate(()=>DB.all('clients').then(c=>c.length))).toBe(1);await page.locator('#addIncomeBtn').click();await page.locator('#incAmt').fill('2100');await page.locator('#incThumbs').fill('7');
+  await page.evaluate(()=>{document.querySelector('#saveIncome').click();document.querySelector('#saveIncome').click();});await expect(page.locator('#overlay')).toBeHidden();
+  expect(await page.evaluate(()=>DB.all('income').then(c=>c.length))).toBe(1);await page.reload();await page.locator('#skipSetup').click();await page.locator('[data-view="income"]').click();await expect(page.locator('#incomeList')).toContainText('Agency');await expect(page.locator('#incomeList')).toContainText('2,100');
+});
+test('Lock Screen setup describes native limitations without claiming installation',async({page})=>{
+  await page.goto('/?action=quick-add');await page.locator('#quickClose').click();await page.locator('#dockSettings').click();await page.locator('#setQuickAccess').click();await expect(page.locator('#sheet')).toContainText('Requires the separate, signed EasyFin iOS companion');await expect(page.locator('#sheet')).toContainText('not installed by this website');await expect(page.locator('#copyQuickLink')).toBeVisible();
+});

@@ -49,7 +49,7 @@ xcodebuild build-for-testing \
   -destination 'generic/platform=iOS Simulator' \
   CODE_SIGNING_ALLOWED=NO
 ```
-To execute the two unit tests, choose a locally available iPhone simulator in Xcode and Product → Test, or use `xcodebuild test` with that simulator's concrete destination. The supplied CI job compiles tests; it does not execute them or claim authentication/handoff coverage.
+To execute the two unit tests, choose a locally available iPhone simulator in Xcode and Product → Test, or use `xcodebuild test` with that simulator's concrete destination. The supplied CI job compiles tests and requests execution on an available iPhone simulator. Check its actual result: a successful compile is not a passed test run, and neither proves authentication/handoff behavior.
 
 ## Configure on iPhone after signing/installing
 1. **Lock Screen widget:** unlock, touch and hold the Lock Screen → Customize → Lock Screen → Add Widgets → EasyFin → Quick Add.
