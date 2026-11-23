@@ -1,0 +1,69 @@
+name: EasyFinCompanion
+options:
+  bundleIdPrefix: com.dzynsbysoham
+  deploymentTarget:
+    iOS: '18.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    TARGETED_DEVICE_FAMILY: '1'
+    CODE_SIGN_STYLE: Automatic
+    CURRENT_PROJECT_VERSION: '1'
+    MARKETING_VERSION: '1.0'
+targets:
+  EasyFinCompanion:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dzynsbysoham.easyfin.companion
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: EasyFin
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    dependencies:
+      - target: EasyFinWidgets
+        embed: true
+  EasyFinWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widgets
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dzynsbysoham.easyfin.companion.widgets
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+    info:
+      path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: EasyFin Quick Add
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+  EasyFinCompanionTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: EasyFinCompanion
+schemes:
+  EasyFinCompanion:
+    build:
+      targets:
+        EasyFinCompanion: all
+        EasyFinWidgets: all
+    test:
+      targets:
+        - EasyFinCompanionTests

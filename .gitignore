@@ -2,3 +2,10 @@ node_modules/
 test-results/
 playwright-report/
 .vercel/
+native/ios/*.xcodeproj/
+native/ios/App/Info.plist
+native/ios/Widgets/Info.plist
+DerivedData/
+*.xcresult/
+
+.venv/

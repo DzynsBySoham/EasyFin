@@ -1,6 +1,8 @@
 /* EasyFin app — Quick Add, Dashboard, Balance, Income, Expenses, Subscriptions, Backup, Push */
 'use strict';
 const $=s=>document.querySelector(s);
+let focusedQuickAdd=document.documentElement.dataset.quickAdd==='true';
+let routeInitialized=false;
 let state={period:null,view:'home',expCat:'all',expMonth:'all',incClient:'all',incMonth:'all'};
 
 /* ---------- Theme ---------- */
@@ -14,6 +16,8 @@ $('#themeBtn').onclick=()=>{const cur=document.documentElement.dataset.theme==='
 
 /* ---------- Navigation ---------- */
 function go(view){
+  if(focusedQuickAdd&&view!=='home')exitQuickAdd();
+  document.documentElement.dataset.view=view;
   if(state.view!==view)state.period=null;
   state.view=view;
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));
@@ -23,7 +27,8 @@ function go(view){
   refresh();
   window.scrollTo({top:0});
 }
-document.querySelectorAll('.dock-btn').forEach(b=>b.onclick=()=>go(b.dataset.view));
+document.querySelectorAll('.dock-btn[data-view]').forEach(b=>b.onclick=()=>go(b.dataset.view));
+$('#dockSettings').onclick=()=>$('#profileBtn').click();
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
 $('#dashExpenseCard').onclick=()=>go('expenses');
 $('#dashIncomeCard').onclick=()=>go('income');
@@ -49,7 +54,7 @@ function bindSlide(el,onDone){
   const reset=()=>{el.classList.remove('dragging','done');move(0);};
   const complete=async()=>{
     if(busy||disabled())return;busy=true;el.setAttribute('aria-busy','true');move(max());
-    try{await onDone();el.classList.add('done');await new Promise(r=>setTimeout(r,300));}
+    try{const saved=await onDone();if(saved===false)return;el.classList.add('done');await new Promise(r=>setTimeout(r,300));}
     catch(error){console.error(error);toast('Could not save. Your entry is still here — please retry.');}
     finally{busy=false;el.removeAttribute('aria-busy');reset();}
   };
@@ -67,40 +72,69 @@ function bindSlide(el,onDone){
 }
 
 /* ---------- Quick Add ---------- */
-$('#quickClose').onclick=()=>{ $('#qaAmount').value='';$('#qaDesc').value=''; updateQAValidity(); };
+$('#quickClose').onclick=()=>{if(qaSaving)return;clearQA();if(focusedQuickAdd){exitQuickAdd();go('expenses');}};
+let qaCategory=null,qaCategoryRevision=0,qaSaving=false,qaDraftId=id();
 async function trySaveExpense(){
-  const amt=parseFloat($('#qaAmount').value);
-  const desc=$('#qaDesc').value.trim();
-  if(!Number.isFinite(amt)||amt<=0){toast('Enter a valid amount');return;}
-  if(!desc){toast('Enter what it was for');$('#qaDesc').focus();return;}
-  // Already gated by Slide to Add: exact name + amount + current pending cycle.
-  const matched=await findPendingSubscription(desc,amt);
-  if(matched){ await confirmSubscriptionPayment(matched,{viaQuickAdd:true}); toast('Subscription paid ✓'); clearQA(); return; }
-  const cat=await categorize(desc);
-  if(!cat){ openCategoryPicker(desc,amt); return; }
-  await saveExpense({amount:amt,description:desc,category:cat});
-  toast('Added ✓'); clearQA();
+  if(qaSaving)return;
+  const amount=Number($('#qaAmount').value),description=$('#qaDesc').value.trim();
+  if(!Number.isFinite(amount)||amount<=0){toast('Enter a valid amount');return false;}
+  if(!description){toast('Enter what it was for');$('#qaDesc').focus();return false;}
+  if(!qaCategory){openCategoryPicker(description);return false;}
+  qaSaving=true;updateQAValidity();
+  $('#qaAmount').disabled=true;$('#qaDesc').disabled=true;$('#quickClose').disabled=true;
+  try{
+    const matched=await findPendingSubscription(description,amount);
+    if(matched)await confirmSubscriptionPayment(matched,{viaQuickAdd:true});
+    else await saveExpense({amount,description,category:qaCategory,recordId:qaDraftId});
+    clearQA();await refresh();toast(matched?'Subscription payment saved':'Expense saved');return true;
+  }finally{
+    qaSaving=false;$('#qaAmount').disabled=false;$('#qaDesc').disabled=false;$('#quickClose').disabled=false;updateQAValidity();
+  }
 }
-function clearQA(){$('#qaAmount').value='';$('#qaDesc').value='';updateQAValidity();refresh();}
-function updateQAValidity(){const amount=Number($('#qaAmount').value);$('#qaSlide').setAttribute('aria-disabled',!(Number.isFinite(amount)&&amount>0&&$('#qaDesc').value.trim()));}
-$('#qaAmount').addEventListener('input',updateQAValidity);$('#qaDesc').addEventListener('input',updateQAValidity);updateQAValidity();
-async function saveExpense({amount,description,category}){
+function clearQA(){
+  $('#qaAmount').value='';$('#qaDesc').value='';qaCategory=null;qaCategoryRevision++;qaDraftId=id();
+  paintCategory();updateQAValidity();refresh();
+}
+function paintCategory(){
+  const cat=CATEGORIES.find(c=>c.id===qaCategory);
+  $('#qaCategoryIcon').innerHTML=cat?cat.icon:'';
+  $('#qaCategoryText').textContent=cat?cat.label:$('#qaDesc').value.trim()?'Choose a category':'Category is detected as you type';
+  $('#qaCategoryBtn').classList.toggle('needs-category',!cat&&!!$('#qaDesc').value.trim());
+}
+function updateQAValidity(){
+  const amount=Number($('#qaAmount').value);
+  $('#qaSlide').setAttribute('aria-disabled',qaSaving||!(Number.isFinite(amount)&&amount>0&&$('#qaDesc').value.trim()&&qaCategory));
+  $('#qaCategoryBtn').disabled=qaSaving||!$('#qaDesc').value.trim();
+}
+async function detectQACategory(){
+  const revision=++qaCategoryRevision;qaCategory=null;paintCategory();updateQAValidity();
+  const category=await categorize($('#qaDesc').value.trim());
+  if(revision!==qaCategoryRevision)return;
+  qaCategory=CATEGORIES.some(c=>c.id===category)?category:null;paintCategory();updateQAValidity();
+}
+$('#qaAmount').addEventListener('input',updateQAValidity);
+$('#qaDesc').addEventListener('input',()=>detectQACategory().catch(()=>{toast('Choose a category to continue');}));
+$('#qaCategoryBtn').onclick=()=>openCategoryPicker($('#qaDesc').value.trim());
+paintCategory();updateQAValidity();
+async function saveExpense({amount,description,category,recordId=id()}){
+  if(!Number.isFinite(amount)||amount<=0||!description.trim()||!CATEGORIES.some(c=>c.id===category))throw new Error('Invalid expense');
   const now=new Date();
-  await DB.add('expenses',{id:id(),amount,description,category,date:now.toISOString(),month:monthKey(now)});
+  await DB.add('expenses',{id:recordId,amount,description,category,date:now.toISOString(),month:monthKey(now)});
 }
 bindSlide($('#qaSlide'),trySaveExpense);
 
-function openCategoryPicker(desc,amt){
-  openSheet(`<button class="close-x" onclick="clearQA();closeSheet()" style="position:absolute;top:14px;right:14px">✕</button>
-    <h2>Pick a category</h2><p class="sub">“${esc(desc)}” wasn't recognised. Choose one of the 6 fixed categories — we'll remember it for next time.</p>
+function openCategoryPicker(description){
+  if(!description||qaSaving)return;
+  openSheet(`<button class="close-x" onclick="clearQA();closeSheet()">✕</button>
+    <h2>Choose a category</h2><p class="sub">${esc(description)}<br>Choose once, then slide to save. EasyFin remembers your choice.</p>
     <div class="cat-grid">${CATEGORIES.map(c=>`<button class="cat-pick" data-cat="${c.id}"><span class="ci">${c.icon}</span>${c.label}</button>`).join('')}</div>`);
   document.querySelectorAll('.cat-pick').forEach(b=>b.onclick=async()=>{
     document.querySelectorAll('.cat-pick').forEach(x=>x.disabled=true);
     try{
-    await rememberKeyword(desc,b.dataset.cat);
-    await saveExpense({amount:amt,description:desc,category:b.dataset.cat});
-    closeSheet(); toast('Added ✓'); clearQA();
-    }catch(e){toast('Could not save. Please retry.');document.querySelectorAll('.cat-pick').forEach(x=>x.disabled=false);}
+      await rememberKeyword(description,b.dataset.cat);
+      if($('#qaDesc').value.trim()===description){qaCategoryRevision++;qaCategory=b.dataset.cat;paintCategory();updateQAValidity();}
+      closeSheet();$('#qaSlide').focus();
+    }catch(e){toast('Could not remember category. Please retry.');document.querySelectorAll('.cat-pick').forEach(x=>x.disabled=false);}
   });
 }
 
@@ -177,9 +211,9 @@ $('#expenseMonth').onchange=e=>{state.expMonth=e.target.value;renderExpenses();}
 $('#incomeMonth').onchange=e=>{state.incMonth=e.target.value;renderIncome();};
 
 async function renderExpenses(){
-  $('#catChips').innerHTML=['all',...CATEGORIES.map(c=>c.id)].map(c=>{
+  $('#catChips').innerHTML=['all','food','travel','shopping','movies','gifts','subscriptions'].map(c=>{
     const label=c==='all'?'All':CATEGORIES.find(x=>x.id===c).label;
-    return `<button class="chip ${state.expCat===c?'active':''}" data-c="${c}">${label}</button>`;
+    return `<button class="chip ${state.expCat===c?'active':''}" aria-pressed="${state.expCat===c}" data-c="${c}">${label}</button>`;
   }).join('');
   document.querySelectorAll('#catChips .chip').forEach(b=>b.onclick=()=>{state.expCat=b.dataset.c;renderExpenses();});
   let list=await DB.all('expenses');
@@ -188,8 +222,8 @@ async function renderExpenses(){
   if(state.expCat!=='all')list=list.filter(e=>e.category===state.expCat);
   if(state.expMonth!=='all')list=list.filter(e=>e.month===state.expMonth);
   list.sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const groups={}; list.forEach(e=>{const d=fmtDay(e.date);(groups[d]=groups[d]||[]).push(e);});
-  $('#expenseList').innerHTML=list.length?Object.entries(groups).map(([d,items])=>`<h3 style="margin:14px 0 8px;font-size:15px">${d}</h3>`+items.map(e=>txnHTML(e,'out')).join('')).join(''):'<p class="empty">No expenses match.</p>';
+  const groups={}; list.forEach(e=>{const d=new Date(e.date).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});(groups[d]=groups[d]||[]).push(e);});
+  $('#expenseList').innerHTML=list.length?Object.entries(groups).map(([d,items])=>`<h3 class="transaction-day">${d}</h3>`+items.map(e=>txnHTML(e,'out')).join('')).join(''):'<p class="empty">No expenses match.</p>';
   const subs=await DB.all('subscriptions'); const pending=subs.filter(s=>s.status==='active').length;
   $('#subsBadge').textContent=pending?pending+' active':'';
 }
@@ -204,7 +238,7 @@ async function renderIncome(){
   list.sort((a,b)=>new Date(b.date)-new Date(a.date));
   $('#incomeList').innerHTML=list.length?list.map(x=>{
     const cl=clients.find(c=>c.id===x.clientId);
-    return `<div class="txn"><div class="cat-dot">↗</div><div class="txn-main"><div class="txn-title">${esc(cl?cl.name:'Client')}</div><div class="txn-sub">${x.thumbnails} thumbnails · ${fmtDate(x.date)}</div></div><div class="txn-amt in">+${fmtINR(x.amount)}</div></div>`;
+    return `<div class="txn"><div class="cat-dot"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></div><div class="txn-main"><div class="txn-title">${esc(cl?cl.name:'Client')}</div><div class="txn-sub">${x.thumbnails} thumbnails · ${fmtDate(x.date)}</div></div><div class="txn-amt in">+${fmtINR(x.amount)}</div></div>`;
   }).join(''):'<p class="empty">No income yet. Add a client to get started.</p>';
 }
 
@@ -249,13 +283,13 @@ $('#addSubBtn').onclick=()=>{
     <label class="field-label">Amount (₹)</label><input class="text-input" id="subAmt" type="number" inputmode="decimal" placeholder="649">
     <label class="field-label">Monthly billing date</label><input class="text-input" id="subDate" type="date">
     <button class="primary-btn" id="saveSub">Save Subscription</button>`);
-  $('#saveSub').onclick=async()=>{
+  $('#saveSub').onclick=guardSubmission($('#saveSub'),async()=>{
     const name=$('#subName').value.trim(), amt=parseFloat($('#subAmt').value), d=$('#subDate').value;
     if(!name||!Number.isFinite(amt)||amt<=0||!d||!Number.isFinite(Date.parse(d))){toast('Fill all fields');return;}
     const billingDay=new Date(d+'T00:00:00').getDate();
     await DB.add('subscriptions',{id:id(),name,amount:amt,billingDay,nextBillingDate:d,status:'active',createdAt:new Date().toISOString()});
     closeSheet();toast('Subscription added ✓');refresh();syncReminderMetadata();
-  };
+  });
 };
 
 /* ---------- Clients & Income ---------- */
@@ -264,13 +298,12 @@ $('#addClientBtn').onclick=()=>{
     <h2>Add Client</h2><p class="sub">Only the client name is needed.</p>
     <label class="field-label">Client Name</label><input class="text-input" id="clientName" placeholder="Client name">
     <button class="primary-btn" id="saveClient">Save Client</button>`);
-  $('#saveClient').onclick=async()=>{
+  $('#saveClient').onclick=guardSubmission($('#saveClient'),async()=>{
     const name=$('#clientName').value.trim(); if(!name){toast('Enter a name');return;}
-    const clients=await DB.all('clients');
-    if(clients.some(c=>normalize(c.name)===normalize(name))){toast('Client already exists');return;}
-    await DB.add('clients',{id:id(),name,createdAt:new Date().toISOString()});
+    const created=await DB.addClient(name);
+    if(!created){toast('Client already exists');return;}
     closeSheet();toast('Client added ✓');refresh();
-  };
+  });
 };
 $('#addIncomeBtn').onclick=async()=>{
   const clients=await DB.all('clients');
@@ -281,13 +314,13 @@ $('#addIncomeBtn').onclick=async()=>{
     <label class="field-label">Client</label><select class="text-input" id="incClient">${clients.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
     <label class="field-label">Thumbnails delivered</label><input class="text-input" id="incThumbs" type="number" inputmode="numeric" placeholder="10">
     <button class="primary-btn" id="saveIncome">Save Income</button>`);
-  $('#saveIncome').onclick=async()=>{
+  $('#saveIncome').onclick=guardSubmission($('#saveIncome'),async()=>{
     const amt=parseFloat($('#incAmt').value), cid=$('#incClient').value, th=Number($('#incThumbs').value);
     if(!Number.isFinite(amt)||amt<=0||!clients.some(c=>c.id===cid)||!Number.isInteger(th)||th<=0){toast('Amount, client & thumbnails are required');return;}
     const now=new Date();
     await DB.add('income',{id:id(),amount:amt,clientId:cid,thumbnails:th,date:now.toISOString(),month:monthKey(now)});
     closeSheet();toast('Income added ✓');refresh();
-  };
+  });
 };
 
 /* ---------- Profile / Settings ---------- */
@@ -297,10 +330,10 @@ $('#profileBtn').onclick=()=>{
     <button class="ghost-btn" id="setExport">Export Backup</button>
     <button class="ghost-btn" id="setImport">Import Backup</button>
     <button class="ghost-btn" id="setBackTap">Quick Setup · iPhone &amp; Back Tap</button>
-    <button class="ghost-btn" id="setPush">Enable Notifications</button>
+    <button class="ghost-btn" id="setPush">Notification availability</button>
     <label class="field-label" for="setTheme">Appearance</label><select class="text-input" id="setTheme"><option value="light">Light</option><option value="dark">Dark</option></select>
     <input type="file" id="importFile" accept="application/json" hidden>
-    <p class="note" style="margin-top:10px">Notifications are optional. If denied, pending subscriptions still show inside the app.</p>`);
+    <p class="note" style="margin-top:10px">Closed-app push reminders are not configured. Due and overdue statuses are available inside EasyFin.</p>`);
   $('#setExport').onclick=exportBackup;
   $('#setImport').onclick=()=>$('#importFile').click();
   $('#setBackTap').onclick=openBackTapGuide;
@@ -354,14 +387,16 @@ async function enablePush(){
 
 /* ---------- Deep links (Shortcuts handoff) ---------- */
 function handleDeepLink(){
+  if(routeInitialized)return;routeInitialized=true;
   const p=new URLSearchParams(location.search);
-  const view=p.get('view')||p.get('action');
+  const view=p.get('action')||p.get('view');
+  if(view==='quick-add'){focusedQuickAdd=true;document.documentElement.dataset.quickAdd='true';}
   const map={'quick-add':'home','home':'home','today':'expenses','week':'expenses','month':'expenses','expenses':'expenses','income':'income','dashboard':'dashboard','subs':'subs','subscriptions':'subs'};
   if(view&&map[view])go(map[view]);
   else go('home');
   if(view==='today'||view==='week'){state.period=view;renderExpenses();}
   if(view==='month'){state.expMonth=monthKey(new Date());renderExpenses();}
-  history.replaceState(null,'',location.pathname);
+  if(!focusedQuickAdd)history.replaceState(null,'',location.pathname);
 }
 
 /* ---------- Init ---------- */
@@ -371,5 +406,21 @@ function handleDeepLink(){
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
   handleDeepLink();
   await refresh();
-  if(!localStorage.getItem('easyfin-onboarded'))showOnboarding();
+  if(!focusedQuickAdd&&!localStorage.getItem('easyfin-onboarded'))showOnboarding();
 })().catch(e=>{console.error(e);toast('Unable to open local storage. Please allow device storage and reload.');});
+
+function exitQuickAdd(){
+  focusedQuickAdd=false;delete document.documentElement.dataset.quickAdd;
+  history.replaceState(null,'',location.pathname);
+}
+// Another same-origin tab can add records while this one is suspended.
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&routeInitialized)refresh().catch(console.error);});
+
+function guardSubmission(button,task){
+  let busy=false;
+  return async()=>{
+    if(busy)return;busy=true;button.disabled=true;button.setAttribute('aria-busy','true');
+    try{await task();}catch(error){console.error(error);toast('Could not save. Check device storage and retry.');}
+    finally{busy=false;button.disabled=false;button.removeAttribute('aria-busy');}
+  };
+}

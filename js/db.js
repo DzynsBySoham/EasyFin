@@ -70,3 +70,18 @@ DB.restore=async function(data,replace){
     }}
   });
 };
+
+// Serialize duplicate checks with writes across tabs; no schema migration required.
+DB.addClient=async function(name){
+  name=String(name||'').trim();
+  if(!name)throw new Error('Enter a client name');
+  const db=await openDB();
+  return new Promise((resolve,reject)=>{
+    const t=db.transaction('clients','readwrite'),store=t.objectStore('clients');let created=false;
+    t.oncomplete=()=>resolve(created);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Client was not saved'));
+    const q=store.getAll();q.onsuccess=()=>{
+      if(q.result.some(c=>normalize(c.name)===normalize(name)))return;
+      store.add({id:id(),name,createdAt:new Date().toISOString()});created=true;
+    };
+  });
+};
