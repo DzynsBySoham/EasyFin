@@ -37,6 +37,7 @@ function validateBackup(data){
       if(['expenses','categoryKeywords'].includes(store)&&!CATEGORIES.some(c=>c.id===r.category))throw new Error('Invalid category');
       if(['expenses','income'].includes(store)&&(!Number.isFinite(Date.parse(r.date))||r.month!==monthKey(r.date)))throw new Error('Invalid record date');
       if(store==='income'&&(!Number.isInteger(r.thumbnails)||r.thumbnails<=0||!data.clients.some(c=>c.id===r.clientId)))throw new Error('Invalid income client or thumbnails');
+      if(store==='settings'&&r.key==='quickAddInbox')throw new Error('Inbox connection keys cannot be restored from backups. Pair again in Settings.');
       if(store==='clients'&&(typeof r.name!=='string'||!r.name.trim()))throw new Error('Invalid client');
       if(store==='subscriptions'&&(!r.name||!['active','cancelled'].includes(r.status)||!Number.isInteger(r.billingDay)||r.billingDay<1||r.billingDay>31||!/^\d{4}-\d{2}-\d{2}$/.test(r.nextBillingDate)))throw new Error('Invalid subscription');
     }

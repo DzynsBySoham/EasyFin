@@ -213,3 +213,25 @@ html[data-quick-add="true"] .quick-page-heading{display:none}
 #view-income #addClientBtn{margin-bottom:20px}
 @media(min-width:380px){#catChips{grid-template-columns:repeat(4,minmax(0,1fr))}#catChips .chip:first-child{grid-column:auto}#catChips .chip:last-child{grid-column:span 2}}
 @media(prefers-reduced-motion:no-preference){.period-value{animation:viewIn .22s ease-out}}
+
+/* Dark-only accent repair: solid controls retain saturation, disabled ones remain legible. */
+[data-theme="dark"]{--blue:#6aa7ff;--blue2:#91bdff;--action-blue:#2879f3}
+[data-theme="dark"] .primary-btn,[data-theme="dark"] .slide[data-color="blue"]{background:linear-gradient(135deg,#3489ff,#246bed);box-shadow:0 6px 20px -12px #3388ff99;color:#fff}
+[data-theme="dark"] .slide[data-color="blue"] .slide-thumb{background:#f5f9ff;color:#1760ce;box-shadow:0 2px 10px #05265655}
+[data-theme="dark"] .slide[aria-disabled="true"]{opacity:1;background:#142d51;box-shadow:none}
+[data-theme="dark"] .slide[aria-disabled="true"] .slide-track{color:#9cbbe5}
+[data-theme="dark"] .slide[aria-disabled="true"] .slide-thumb{background:#31517b;color:#d1e4ff;box-shadow:none}
+[data-theme="dark"] .balance-hero{background:linear-gradient(135deg,#12325f,#1556ad);box-shadow:0 14px 36px -26px #2178f0}
+[data-theme="dark"] .primary-btn:disabled{opacity:1;background:#17355d;color:#a8c3e7;box-shadow:none}
+/* Keep long names, subscription actions and money from colliding on narrow screens. */
+#subsList .txn-main{min-width:0}#subsList .txn-title{white-space:normal;overflow-wrap:anywhere;line-height:1.4}
+#subPayments .row-between span:first-child{min-width:0;overflow-wrap:anywhere}
+#dashBreakdown .row-between span:first-child{display:flex;align-items:center;gap:8px;min-width:0}
+#dashBreakdown .icon{flex:none;width:17px;height:17px}
+.stat-value{overflow-wrap:anywhere;min-width:0;font-variant-numeric:tabular-nums}
+.month-select{min-width:0;flex-shrink:1}
+.inbox-notice{display:flex;align-items:center;gap:12px;border:1px solid var(--border);border-radius:18px;background:var(--surface);padding:12px 14px;margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.5}
+.inbox-notice[hidden]{display:none}.inbox-notice p{flex:1;min-width:0}.inbox-notice button{min-height:44px;padding:8px;color:var(--blue);font-size:13px;font-weight:550;flex:none}
+#inboxConnectionStatus{margin:12px 0;overflow-wrap:anywhere}#inboxActions{margin-top:16px}
+#privateInboxLink{min-height:110px;overflow-wrap:anywhere;font-size:13px;resize:vertical}
+@media(max-width:360px){#subsList .txn{grid-template-columns:32px minmax(0,1fr) auto}#subsList [data-cancel]{grid-column:3;grid-row:2}#subsList .txn-main{grid-row:span 2}#subsList .cat-dot{align-self:start}}

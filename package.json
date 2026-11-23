@@ -4,7 +4,8 @@
   "description": "Premium, local-first, iPhone-first expense & income tracker. Vanilla HTML/CSS/JS, IndexedDB, PWA, Vercel serverless reminders. No frameworks.",
   "scripts": {
     "test": "node scripts/test.cjs",
-    "check": "node --check js/app.js && node --check js/db.js && node --check js/utils.js && node --check js/categorize.js && node --check sw.js"
+    "check": "node --check js/app.js && node --check js/db.js && node --check js/utils.js && node --check js/categorize.js && node --check sw.js && node --check js/inbox.js && node --check server/inbox.mjs && node --check api/inbox.js",
+    "test:server": "node --test tests-server/*.test.mjs"
   },
   "repository": {
     "type": "git",
