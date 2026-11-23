@@ -85,10 +85,10 @@ async function trySaveExpense(){
   qaSaving=true;updateQAValidity();
   $('#qaAmount').disabled=true;$('#qaDesc').disabled=true;$('#quickClose').disabled=true;
   try{
-    const matched=await findPendingSubscription(description,amount);
+    const matched=Inbox.isSender()?null:await findPendingSubscription(description,amount);
     if(matched){const recorded=await confirmSubscriptionPayment(matched,{viaQuickAdd:true});if(!recorded){toast('This subscription cycle has already been handled');return false;}}
     else await saveExpense({amount,description,category:qaCategory,recordId:qaDraftId});
-    clearQA();await refresh();toast(matched?'Subscription payment saved':'Expense saved');return true;
+    clearQA();await refresh();toast(matched?'Subscription payment saved':Inbox.saveMessage());return true;
   }finally{
     qaSaving=false;$('#qaAmount').disabled=false;$('#qaDesc').disabled=false;$('#quickClose').disabled=false;updateQAValidity();
   }
@@ -122,7 +122,7 @@ paintCategory();updateQAValidity();
 async function saveExpense({amount,description,category,recordId=id()}){
   if(!Number.isFinite(amount)||amount<=0||!description.trim()||!CATEGORIES.some(c=>c.id===category))throw new Error('Invalid expense');
   const now=new Date();
-  await DB.add('expenses',{id:recordId,amount,description,category,date:now.toISOString(),month:monthKey(now)});
+  await Inbox.saveExpense({id:recordId,amount,description,category,date:now.toISOString(),month:monthKey(now)});
 }
 bindSlide($('#qaSlide'),trySaveExpense);
 
@@ -335,7 +335,8 @@ $('#addIncomeBtn').onclick=async()=>{
 /* ---------- Profile / Settings ---------- */
 function openSettings(){
   openSheet(`<button class="close-x" onclick="closeSheet()" style="position:absolute;top:14px;right:14px">✕</button>
-    <h2>Profile &amp; Settings</h2><p class="sub">EasyFin v1.0 · All financial data stays on this device (IndexedDB).</p>
+    <h2>Profile &amp; Settings</h2><p class="sub">EasyFin v1.0 · Records are stored locally. Optional inbox pairing sends only encrypted expenses.</p>
+    <button class="ghost-btn" id="setInbox">Connect Safari Quick Add</button>
     <button class="ghost-btn" id="setExport">Export Backup</button>
     <button class="ghost-btn" id="setImport">Import Backup</button>
     <button class="ghost-btn" id="setQuickAccess">Lock Screen &amp; Quick Add access</button>
@@ -344,6 +345,7 @@ function openSettings(){
     <label class="field-label" for="setTheme">Appearance</label><select class="text-input" id="setTheme"><option value="light">Light</option><option value="dark">Dark</option></select>
     <input type="file" id="importFile" accept="application/json" hidden>
     <p class="note" style="margin-top:10px">Closed-app push reminders are not configured. Due and overdue statuses are available inside EasyFin.</p>`);
+  $('#setInbox').onclick=()=>Inbox.settings();
   $('#setExport').onclick=exportBackup;
   $('#setImport').onclick=()=>$('#importFile').click();
   $('#setBackTap').onclick=openBackTapGuide;
@@ -356,7 +358,7 @@ async function exportBackup(){
   const data={app:'EasyFin',schemaVersion:1,exportedAt:new Date().toISOString(),
     expenses:await DB.all('expenses'),income:await DB.all('income'),clients:await DB.all('clients'),
     subscriptions:await DB.all('subscriptions'),subscriptionPayments:await DB.all('subscriptionPayments'),
-    categoryKeywords:await DB.all('categoryKeywords'),settings:await DB.all('settings')};
+    categoryKeywords:await DB.all('categoryKeywords'),settings:(await DB.all('settings')).filter(s=>s.key!=='quickAddInbox')};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='easyfin-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();
   toast('Backup exported ✓');
@@ -371,7 +373,7 @@ async function importBackup(file){
     <button class="ghost-btn" id="impMerge">Merge (keep existing)</button>`);
   const apply=async(replace)=>{
     $('#impReplace').disabled=true;$('#impMerge').disabled=true;
-    try{await DB.restore(data,replace);const restoredTheme=await DB.setting('theme');if(restoredTheme)await applyTheme(restoredTheme);else await initTheme();}catch(e){toast('Restore failed; no changes were made.');$('#impReplace').disabled=false;$('#impMerge').disabled=false;return;}
+    try{await DB.restore(data,replace);await Inbox.reload();Inbox.notice();const restoredTheme=await DB.setting('theme');if(restoredTheme)await applyTheme(restoredTheme);else await initTheme();}catch(e){toast('Restore failed; no changes were made.');$('#impReplace').disabled=false;$('#impMerge').disabled=false;return;}
     closeSheet();toast('Restored ✓');refresh();
   };
   $('#impReplace').onclick=()=>apply(true); $('#impMerge').onclick=()=>apply(false);
@@ -382,7 +384,7 @@ function showOnboarding(step=0){
   const pages=[
     ['A little clarity.\nEvery day.','Welcome to EasyFin','Your money, without the noise. Capture expenses in seconds, track client income and stay on top of subscriptions. Private by design. Stored on this device.'],
     ['Your finances.\nOne tap away.','Install on iPhone','Open EasyFin in Safari on your iPhone. Tap Share → Add to Home Screen → Add. If “Open as Web App” appears, enable it. Then launch EasyFin from its new Home Screen icon. Use Safari for this installation flow, not an unsupported browser tab.'],
-    ['Two taps.\nOne less thing.','Double Back Tap','In Apple Shortcuts, create “EasyFin Quick Add”. Add a URL action with '+location.origin+'/?view=quick-add, then an Open URLs action. Next: '+setupPath+' → Double Tap → EasyFin Quick Add. Unlock your iPhone before entering an expense.'],
+    ['Two taps.\nOne less thing.','Double Back Tap','In Apple Shortcuts, create “EasyFin Quick Add”. Add a URL action with '+location.origin+'/?view=quick-add, then an Open URLs action. Safari uses different storage from the Home Screen app: set up Connect Safari Quick Add in the main app first. Without pairing, saves stay in Safari. Next: '+setupPath+' → Double Tap → EasyFin Quick Add. Unlock your iPhone before entering an expense.'],
     ['Your own\nquick menu.','Triple Back Tap','Create “EasyFin Quick Menu” in Shortcuts using Choose from Menu: Today’s Expenses, This Week’s Overview, This Month’s Expenses, Open EasyFin. In each branch, use Open URLs with '+location.origin+'/?view= followed by today, week, month or home. Then '+setupPath+' → Triple Tap → EasyFin Quick Menu.']
   ];
   const p=pages[step];
@@ -416,7 +418,9 @@ function handleDeepLink(){
   if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
   handleDeepLink();
   await refresh();
-  if(!focusedQuickAdd&&!localStorage.getItem('easyfin-onboarded'))showOnboarding();
+  const pairingRequested=!!window.easyfinPairing;
+  await Inbox.init();
+  if(!focusedQuickAdd&&!pairingRequested&&!localStorage.getItem('easyfin-onboarded'))showOnboarding();
 })().catch(e=>{console.error(e);toast('Unable to open local storage. Please allow device storage and reload.');});
 
 function exitQuickAdd(){
@@ -439,6 +443,7 @@ function openQuickAccessGuide(){
   openSheet(`<button class="close-x" onclick="closeSheet()">✕</button><h2>One action. Straight to Quick Add.</h2>
     <p class="sub">The focused link opens only expense entry. It skips the Dashboard, onboarding and navigation. No financial details are included in the link.</p>
     <button class="primary-btn" id="copyQuickLink">Copy Quick Add link</button>
+    <h3 class="access-heading">One expense database</h3><p class="sub">In Home Screen EasyFin, open Settings → Connect Safari Quick Add. Create a private connection, copy its setup link, then open that link in Safari and confirm Connect. New Safari expenses are saved locally and encrypted for the app inbox. Open the Home Screen app to import them. The relay must be configured; this is opt-in, not shared browser storage.</p>
     <h3 class="access-heading">Lock Screen &amp; Control Center</h3>
     <p class="sub">Requires the separate, signed EasyFin iOS companion (iOS 18+). Native source is provided in the repository, but it is not installed by this website or distributed through Vercel. After installing it with Xcode or an approved distribution channel, add EasyFin Quick Add from the iPhone’s control gallery. iOS handles authentication.</p>
     <h3 class="access-heading">Shortcuts &amp; Action Button</h3>
