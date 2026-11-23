@@ -1,11 +1,11 @@
 /* Keyword categorisation engine — local only, no AI */
 const CATEGORIES=[
-  {id:'food',label:'Food',icon:'🍔'},
-  {id:'travel',label:'Travel',icon:'🚇'},
-  {id:'shopping',label:'Shopping',icon:'🛍️'},
-  {id:'movies',label:'Movies',icon:'🎬'},
-  {id:'subscriptions',label:'Subscriptions',icon:'🔁'},
-  {id:'gifts',label:'Gifts',icon:'🎁'},
+  {id:'food',label:'Food',icon:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3v7c0 3 5 3 5 0V3M6.5 3v18M17 3c-4 5-4 10 0 10V3Zm0 10v8"/></svg>'},
+  {id:'travel',label:'Travel',icon:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17h14V5H5v12Zm0-9h14M8 21l2-4m6 4-2-4M8 13h.01M16 13h.01"/></svg>'},
+  {id:'shopping',label:'Shopping',icon:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16l-1 14H5L4 7Zm4 0V6a4 4 0 0 1 8 0v1"/></svg>'},
+  {id:'movies',label:'Movies',icon:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18v13H3V8Zm0 0V3h18v5M7 3l3 5m4-5 3 5"/></svg>'},
+  {id:'subscriptions',label:'Subscriptions',icon:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8a8 8 0 0 1 14-2l2 2M20 3v5h-5M20 16a8 8 0 0 1-14 2l-2-2M4 21v-5h5"/></svg>'},
+  {id:'gifts',label:'Gifts',icon:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h18v4H3V8Zm2 4v9h14v-9M12 8v13M12 8C3 8 6 0 12 8Zm0 0c9 0 6-8 0 0"/></svg>'},
 ];
 const BUILTIN_KEYWORDS={
   food:["mcdonald","mcd","burger king","pizza hut","domino","restaurant","cafe","coffee","starbucks","snack","food","lunch","dinner","breakfast","zomato","swiggy","dosa","biryani","chai","tea","juice","bakery","kfc","subway","taco","sushi","grocery","vegetable","fruit","milk","bread","chocolate","ice cream","dinner","lunch"],

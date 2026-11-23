@@ -1,0 +1,24 @@
+{
+  "name": "easyfin",
+  "version": "1.0.0",
+  "description": "Premium, local-first, iPhone-first expense & income tracker. Vanilla HTML/CSS/JS, IndexedDB, PWA, Vercel serverless reminders. No frameworks.",
+  "scripts": {
+    "test": "node scripts/test.cjs",
+    "check": "node --check js/app.js && node --check js/db.js && node --check js/utils.js && node --check js/categorize.js && node --check sw.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DzynsBySoham/EasyFin.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/DzynsBySoham/EasyFin/issues"
+  },
+  "homepage": "https://github.com/DzynsBySoham/EasyFin#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@sparticuz/chromium": "^153.0.0"
+  }
+}

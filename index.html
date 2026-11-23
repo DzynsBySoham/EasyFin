@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>EasyFin — Personal Finance</title>
 <meta name="description" content="EasyFin — fast, private, local-first personal finance for iPhone.">
-<meta name="theme-color" content="#0a1628" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#f7f9fc">
+<script>try{const t=localStorage.getItem("easyfin-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.dataset.theme=t;document.querySelector('meta[name="theme-color"]').content=t==="dark"?"#050506":"#f7f9fc";}catch{}</script>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -134,11 +134,11 @@
 
   <!-- Floating nav (Spotify-inspired pill) -->
   <nav class="dock" aria-label="Main navigation">
-    <button class="dock-btn active" data-view="home"><span class="dock-ico">⌂</span><span>Home</span></button>
-    <button class="dock-btn" data-view="dashboard"><span class="dock-ico">▦</span><span>Dashboard</span></button>
-    <button class="dock-btn" data-view="balance"><span class="dock-ico">◈</span><span>Balance</span></button>
-    <button class="dock-btn" data-view="income"><span class="dock-ico">↗</span><span>Income</span></button>
-    <button class="dock-btn" data-view="expenses"><span class="dock-ico">▤</span><span>Expenses</span></button>
+    <button class="dock-btn active" data-view="home"><span class="dock-ico"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10l9-7 9 7v11h-6v-7H9v7H3V10Z"/></svg></span><span>Home</span></button>
+    <button class="dock-btn" data-view="dashboard"><span class="dock-ico"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"/></svg></span><span>Dashboard</span></button>
+    <button class="dock-btn" data-view="balance"><span class="dock-ico"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v14H3V7Zm0 0V4h15v3m-2 7h5m-5 0h.01"/></svg></span><span>Balance</span></button>
+    <button class="dock-btn" data-view="income"><span class="dock-ico"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17 19 3M7 3h12v12M4 21h16"/></svg></span><span>Income</span></button>
+    <button class="dock-btn" data-view="expenses"><span class="dock-ico"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18l-3-2-4 2-4-2-3 2V3Zm4 5h6m-6 4h6"/></svg></span><span>Expenses</span></button>
   </nav>
 
   <!-- Modals -->
