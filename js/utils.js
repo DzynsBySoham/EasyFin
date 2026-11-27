@@ -8,10 +8,12 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.hidden=false;clearTimeout(t._h);t._h=setTimeout(()=>t.hidden=true,2600);}
 function animateNumber(el,to){
   if(el.dataset.v===String(to))return;
-  const from=parseFloat(el.dataset.v||'0'); el.dataset.v=to;
-  el.classList.add('blur');
-  setTimeout(()=>{ el.textContent=fmtINR(to); el.classList.remove('blur'); },180);
-  void from;
+  const initial=el.dataset.v===undefined;
+  el.dataset.v=String(to);el.textContent=fmtINR(to);
+  el._numberAnimation?.cancel();
+  if(!initial&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&el.animate){
+    el._numberAnimation=el.animate([{opacity:.5,filter:'blur(3px)',transform:'translateY(3px)'},{opacity:1,filter:'blur(0)',transform:'translateY(0)'}],{duration:240,easing:'ease-out'});
+  }
 }
 function greeting(){const h=new Date().getHours();return h<12?'Good morning':h<17?'Good afternoon':'Good evening';}
 /* Next monthly billing date anchored to original day, clamped to month end without drift */

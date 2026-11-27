@@ -235,3 +235,24 @@ html[data-quick-add="true"] .quick-page-heading{display:none}
 #inboxConnectionStatus{margin:12px 0;overflow-wrap:anywhere}#inboxActions{margin-top:16px}
 #privateInboxLink{min-height:110px;overflow-wrap:anywhere;font-size:13px;resize:vertical}
 @media(max-width:360px){#subsList .txn{grid-template-columns:32px minmax(0,1fr) auto}#subsList [data-cancel]{grid-column:3;grid-row:2}#subsList .txn-main{grid-row:span 2}#subsList .cat-dot{align-self:start}}
+
+/* Native document scrolling: no scroll hijacking or full-page animated filters. */
+html{scroll-behavior:smooth;scroll-padding-bottom:110px}
+body{overscroll-behavior-y:auto}
+.slide{touch-action:pan-y}
+.sheet{overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;scrollbar-gutter:stable}
+.overlay{backdrop-filter:none;-webkit-backdrop-filter:none;background:#0008}
+/* A quieter, compact navigation rail with a blue icon well, rather than black pills. */
+.dock{max-width:540px;border-radius:26px;padding:6px 5px;gap:0;background:var(--dock);box-shadow:0 5px 24px -12px #071b4733;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.dock-btn{border-radius:20px;min-height:60px;padding:5px 0;gap:4px;font-size:10px;line-height:1.2;font-weight:500;position:relative}
+.dock-btn.active{background:transparent;color:var(--blue)}
+.dock-ico{width:40px;height:28px;border-radius:12px;transition:background .2s,transform .2s}
+.dock-btn.active .dock-ico{background:color-mix(in srgb,var(--blue) 12%,transparent)}
+.dock-btn:active .dock-ico{transform:scale(.92)}
+.dock .icon{width:20px;height:20px;stroke-width:1.7}
+.source-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.source-row>span{flex:1;min-width:0;overflow-wrap:anywhere;font-size:14px}
+.source-row small{display:block;color:var(--muted);margin-top:4px}
+.source-row button{width:auto;margin:0;padding:10px 14px;flex:none}
+@media(max-width:360px){.dock{left:8px;right:8px}.dock-btn{font-size:9px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;animation-iteration-count:1!important}}

@@ -87,7 +87,8 @@ DB.addClient=async function(name){
     const t=db.transaction('clients','readwrite'),store=t.objectStore('clients');let created=false;
     t.oncomplete=()=>resolve(created);t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Client was not saved'));
     const q=store.getAll();q.onsuccess=()=>{
-      if(q.result.some(c=>normalize(c.name)===normalize(name)))return;
+      const existing=q.result.find(c=>normalize(c.name)===normalize(name));
+      if(existing){if(existing.archived){store.put({...existing,archived:false});created=true;}return;}
       store.add({id:id(),name,createdAt:new Date().toISOString()});created=true;
     };
   });

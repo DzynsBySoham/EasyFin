@@ -23,11 +23,11 @@ function go(view){
   if(state.view!==view)state.period=null;
   state.view=view;
   document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+view));
-  document.querySelectorAll('.dock-btn').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
+  document.querySelectorAll('.dock-btn[data-view]').forEach(b=>{const active=b.dataset.view===view;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
   const titles={home:'Quick Add',dashboard:'Dashboard',balance:'Balance',income:'Income',expenses:'Expenses',subs:'Subscriptions'};
   document.title=(titles[view]||'EasyFin')+' · EasyFin';
   refresh();
-  window.scrollTo({top:0});
+  window.scrollTo({top:0,behavior:'instant'});
 }
 document.querySelectorAll('.dock-btn[data-view]').forEach(b=>b.onclick=()=>go(b.dataset.view));
 $('#dockSettings').onclick=()=>openSettings();
@@ -38,8 +38,8 @@ $('#openSubsBtn').onclick=()=>go('subs');
 
 /* ---------- Sheet / modal ---------- */
 let sheetReturnFocus=null;
-function openSheet(html){const o=$('#overlay'),s=$('#sheet');if(o.hidden)sheetReturnFocus=document.activeElement;s.innerHTML=html;s.querySelectorAll('.field-label').forEach(label=>{if(label.nextElementSibling?.id)label.htmlFor=label.nextElementSibling.id;});s.querySelectorAll('.close-x').forEach(b=>b.setAttribute('aria-label','Close without saving'));o.hidden=false;document.body.style.overflow='hidden';const heading=s.querySelector('h2');if(heading){heading.id='sheetTitle';s.setAttribute('aria-labelledby','sheetTitle');}requestAnimationFrame(()=>s.querySelector('button,input,select')?.focus());}
-function closeSheet(){$('#overlay').hidden=true;$('#sheet').innerHTML='';document.body.style.overflow='';sheetReturnFocus?.focus();}
+function openSheet(html){const o=$('#overlay'),s=$('#sheet');if(o.hidden)sheetReturnFocus=document.activeElement;s.innerHTML=html;s.querySelectorAll('.field-label').forEach(label=>{if(label.nextElementSibling?.id)label.htmlFor=label.nextElementSibling.id;});s.querySelectorAll('.close-x').forEach(b=>b.setAttribute('aria-label','Close without saving'));o.hidden=false;document.body.style.overflow='hidden';const heading=s.querySelector('h2');if(heading){heading.id='sheetTitle';s.setAttribute('aria-labelledby','sheetTitle');}requestAnimationFrame(()=>s.querySelector('button,input,select')?.focus({preventScroll:true}));}
+function closeSheet(){$('#overlay').hidden=true;$('#sheet').innerHTML='';document.body.style.overflow='';sheetReturnFocus?.focus({preventScroll:true});}
 document.addEventListener('keydown',e=>{if($('#overlay').hidden)return;if(e.key==='Escape'){if($('.onboarding'))return;if($('.cat-grid'))clearQA();closeSheet();}if(e.key==='Tab'){const nodes=[...$('#sheet').querySelectorAll('button:not(:disabled),input:not([hidden]),select,[tabindex="0"]')];const first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
 $('#overlay').addEventListener('click',e=>{if(e.target.id==='overlay'&&!$('.onboarding')){if($('.cat-grid'))clearQA();closeSheet();}});
 
@@ -236,7 +236,7 @@ async function renderExpenses(){
 
 async function renderIncome(){
   const clients=await DB.all('clients');
-  $('#clientChips').innerHTML=[{id:'all',name:'All Clients'},...clients].map(c=>`<button class="chip ${state.incClient===c.id?'active':''}" aria-pressed="${state.incClient===c.id}" data-c="${c.id}">${esc(c.name)}</button>`).join('');
+  $('#clientChips').innerHTML=[{id:'all',name:'All Sources'},...clients].map(c=>`<button class="chip ${state.incClient===c.id?'active':''}" aria-pressed="${state.incClient===c.id}" data-c="${c.id}">${esc(c.name)}</button>`).join('');
   document.querySelectorAll('#clientChips .chip').forEach(b=>b.onclick=()=>{state.incClient=b.dataset.c;renderIncome();});
   let list=await DB.all('income');
   if(state.incMonth!=='all')list=list.filter(x=>x.month===state.incMonth);
@@ -248,7 +248,7 @@ async function renderIncome(){
   $('#incomeList').innerHTML=list.length?list.map(x=>{
     const cl=clients.find(c=>c.id===x.clientId);
     return `<div class="txn"><div class="cat-dot"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></div><div class="txn-main"><div class="txn-title">${esc(cl?cl.name:'Client')}</div><div class="txn-sub">${x.thumbnails} thumbnails · ${fmtDate(x.date)}</div></div><div class="txn-amt in">+${fmtINR(x.amount)}</div></div>`;
-  }).join(''):'<p class="empty">No income yet. Add a client to get started.</p>';
+  }).join(''):'<p class="empty">No income yet.</p>';
 }
 
 async function renderSubs(){
@@ -304,19 +304,31 @@ $('#addSubBtn').onclick=()=>{
 /* ---------- Clients & Income ---------- */
 $('#addClientBtn').onclick=()=>{
   openSheet(`<button class="close-x" onclick="closeSheet()" style="position:absolute;top:14px;right:14px">✕</button>
-    <h2>Add Client</h2><p class="sub">Only the client name is needed.</p>
-    <label class="field-label">Client Name</label><input class="text-input" id="clientName" placeholder="Client name">
-    <button class="primary-btn" id="saveClient">Save Client</button>`);
+    <h2>Add Source</h2>
+    <label class="field-label">Source Name</label><input class="text-input" id="clientName" placeholder="Source name">
+    <button class="primary-btn" id="saveClient">Save Source</button>`);
   $('#saveClient').onclick=guardSubmission($('#saveClient'),async()=>{
     const name=$('#clientName').value.trim(); if(!name){toast('Enter a name');return;}
     const created=await DB.addClient(name);
-    if(!created){toast('Client already exists');return;}
-    closeSheet();toast('Client added ✓');refresh();
+    if(!created){toast('Source already exists');return;}
+    closeSheet();toast('Source added ✓');refresh();
   });
 };
-$('#addIncomeBtn').onclick=async()=>{
+async function manageSources(){
   const clients=await DB.all('clients');
-  if(!clients.length){toast('Add a client first');$('#addClientBtn').click();return;}
+  openSheet(`<button class="close-x" onclick="closeSheet()">✕</button><h2>Manage Sources</h2><p class="sub">Removing a source keeps its income history. Restore it here anytime.</p><div class="source-list">${clients.map(c=>`<div class="source-row"><span>${esc(c.name)}${c.archived?' <small>Removed</small>':''}</span><button class="ghost-btn" data-source="${esc(c.id)}">${c.archived?'Restore':'Remove'}</button></div>`).join('')||'<p class="empty">No sources yet.</p>'}</div>`);
+  document.querySelectorAll('[data-source]').forEach(b=>b.onclick=()=>{
+    const source=clients.find(c=>c.id===b.dataset.source);
+    if(source.archived){restoreSource(source);return;}
+    openSheet(`<button class="close-x" onclick="closeSheet()">✕</button><h2>Remove ${esc(source.name)}?</h2><p class="sub">It will no longer appear when adding income. Existing income, totals and backups stay unchanged.</p><button class="primary-btn" id="removeSource">Remove Source</button>`);
+    $('#removeSource').onclick=guardSubmission($('#removeSource'),async()=>{await DB.put('clients',{...source,archived:true});await refresh();await manageSources();});
+  });
+}
+async function restoreSource(source){await DB.put('clients',{...source,archived:false});await refresh();await manageSources();}
+$('#manageSourcesBtn').onclick=manageSources;
+$('#addIncomeBtn').onclick=async()=>{
+  const clients=(await DB.all('clients')).filter(c=>!c.archived);
+  if(!clients.length){toast('Add a source first');$('#addClientBtn').click();return;}
   openSheet(`<button class="close-x" onclick="closeSheet()" style="position:absolute;top:14px;right:14px">✕</button>
     <h2>Add Income</h2><p class="sub">Record only after full payment is received. Date/time captured automatically.</p>
     <label class="field-label">Amount received (₹)</label><input class="text-input" id="incAmt" type="number" inputmode="decimal" placeholder="5000">
@@ -458,7 +470,7 @@ function openQuickAccessGuide(){
 function renderPeriodSummary(prefix,title,period,periodRecords,filteredRecords,filterLabel){
   const sum=records=>records.reduce((total,record)=>total+Number(record.amount),0);
   $('#'+prefix+'TotalLabel').textContent=title+' · '+period;
-  $('#'+prefix+'Total').textContent=fmtINR(sum(periodRecords));
+  animateNumber($('#'+prefix+'Total'),sum(periodRecords));
   const filtered=$('#'+prefix+'FilteredTotal');
   filtered.hidden=!filterLabel;
   filtered.textContent=filterLabel?filterLabel+' · '+fmtINR(sum(filteredRecords)):'';
