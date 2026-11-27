@@ -36,6 +36,13 @@ $('#dashExpenseCard').onclick=()=>go('expenses');
 $('#dashIncomeCard').onclick=()=>go('income');
 $('#openSubsBtn').onclick=()=>go('subs');
 
+// Measure the actual floating dock (including safe-area offset) after resize/rotation.
+function updateNavClearance(){const nav=$('.dock');if(!nav||getComputedStyle(nav).display==='none')return;document.documentElement.style.setProperty('--nav-clearance',Math.ceil(nav.getBoundingClientRect().height+parseFloat(getComputedStyle(nav).bottom||0)+24)+'px');}
+new ResizeObserver(updateNavClearance).observe($('.dock'));
+window.addEventListener('resize',updateNavClearance,{passive:true});
+window.visualViewport?.addEventListener('resize',updateNavClearance,{passive:true});
+updateNavClearance();
+
 /* ---------- Sheet / modal ---------- */
 let sheetReturnFocus=null;
 function openSheet(html){const o=$('#overlay'),s=$('#sheet');if(o.hidden)sheetReturnFocus=document.activeElement;s.innerHTML=html;s.querySelectorAll('.field-label').forEach(label=>{if(label.nextElementSibling?.id)label.htmlFor=label.nextElementSibling.id;});s.querySelectorAll('.close-x').forEach(b=>b.setAttribute('aria-label','Close without saving'));o.hidden=false;document.body.style.overflow='hidden';const heading=s.querySelector('h2');if(heading){heading.id='sheetTitle';s.setAttribute('aria-labelledby','sheetTitle');}requestAnimationFrame(()=>s.querySelector('button,input,select')?.focus({preventScroll:true}));}
@@ -171,17 +178,21 @@ async function syncReminderMetadata(){
 }
 
 /* ---------- Refresh / renders ---------- */
-async function refresh(){
-  await Promise.all([renderToday(),renderDashboard(),renderBalance(),renderExpenses(),renderIncome(),renderSubs(),fillMonthSelects()]);
+let refreshQueue=Promise.resolve();
+function refresh(){
+  const next=refreshQueue.catch(()=>{}).then(async()=>{await fillMonthSelects();await Promise.all([renderToday(),renderDashboard(),renderBalance(),renderExpenses(),renderIncome(),renderSubs()]);});
+  refreshQueue=next;return next;
 }
 async function renderToday(){
   const today=monthKey(new Date());
   const all=(await DB.all('expenses')).filter(e=>e.month===today&&new Date(e.date).toDateString()===new Date().toDateString()).sort((a,b)=>new Date(b.date)-new Date(a.date));
   $('#todayList').innerHTML=all.length?all.map(e=>txnHTML(e,'out')).join(''):'<p class="empty">No expenses today yet.</p>';
 }
+function recordActions(record,store,amount){return `<div class="txn-actions"><div class="txn-amt ${store==='income'?'in':'out'}">${store==='income'?'+':'−'}${fmtINR(amount)}</div><button class="txn-edit" data-record="${esc(record.id)}" data-store="${store}" aria-label="Edit ${store==='income'?'income':'expense'}"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15v5Z"/></svg></button></div>`;}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-record][data-store]');if(b)editRecord(b.dataset.store,b.dataset.record).catch(()=>toast('Could not open this record. Please retry.'));});
 function txnHTML(e,kind){
   const cat=CATEGORIES.find(c=>c.id===e.category);
-  return `<div class="txn"><div class="cat-dot">${cat?cat.icon:'•'}</div><div class="txn-main"><div class="txn-title">${esc(e.description)}</div><div class="txn-sub">${cat?cat.label:''} · ${fmtDate(e.date)}</div></div><div class="txn-amt ${kind}">${kind==='in'?'+':'−'}${fmtINR(e.amount)}</div></div>`;
+  return `<div class="txn"><div class="cat-dot">${cat?cat.icon:'•'}</div><div class="txn-main"><div class="txn-title">${esc(e.description)}</div><div class="txn-sub">${cat?cat.label:''} · ${fmtDate(e.date)}</div></div>${recordActions(e,'expenses',e.amount)}</div>`;
 }
 async function monthTotals(){
   const mk=monthKey(new Date());
@@ -209,7 +220,7 @@ async function fillMonthSelects(){
   const opts=['all',...new Set([monthKey(new Date()),...months])].map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('');
   const em=$('#expenseMonth'),im=$('#incomeMonth');
   const ev=state.expMonth,iv=state.incMonth; em.innerHTML=opts; im.innerHTML=opts;
-  em.value=[...em.options].some(o=>o.value===ev)?ev:'all'; im.value=[...im.options].some(o=>o.value===iv)?iv:'all';
+  em.value=[...em.options].some(o=>o.value===ev)?ev:'all'; im.value=[...im.options].some(o=>o.value===iv)?iv:'all';state.expMonth=em.value;state.incMonth=im.value;
 }
 $('#expenseMonth').onchange=e=>{state.expMonth=e.target.value;state.period=null;renderExpenses();};
 $('#incomeMonth').onchange=e=>{state.incMonth=e.target.value;renderIncome();};
@@ -236,6 +247,7 @@ async function renderExpenses(){
 
 async function renderIncome(){
   const clients=await DB.all('clients');
+  if(state.incClient!=='all'&&!clients.some(c=>c.id===state.incClient))state.incClient='all';
   $('#clientChips').innerHTML=[{id:'all',name:'All Sources'},...clients].map(c=>`<button class="chip ${state.incClient===c.id?'active':''}" aria-pressed="${state.incClient===c.id}" data-c="${c.id}">${esc(c.name)}</button>`).join('');
   document.querySelectorAll('#clientChips .chip').forEach(b=>b.onclick=()=>{state.incClient=b.dataset.c;renderIncome();});
   let list=await DB.all('income');
@@ -247,7 +259,7 @@ async function renderIncome(){
   list.sort((a,b)=>new Date(b.date)-new Date(a.date));
   $('#incomeList').innerHTML=list.length?list.map(x=>{
     const cl=clients.find(c=>c.id===x.clientId);
-    return `<div class="txn"><div class="cat-dot"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></div><div class="txn-main"><div class="txn-title">${esc(cl?cl.name:'Client')}</div><div class="txn-sub">${x.thumbnails} thumbnails · ${fmtDate(x.date)}</div></div><div class="txn-amt in">+${fmtINR(x.amount)}</div></div>`;
+    return `<div class="txn"><div class="cat-dot"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14"/></svg></div><div class="txn-main"><div class="txn-title">${esc(cl?cl.name:'Client')}</div><div class="txn-sub">${x.thumbnails} thumbnails · ${fmtDate(x.date)}</div></div>${recordActions(x,'income',x.amount)}</div>`;
   }).join(''):'<p class="empty">No income yet.</p>';
 }
 
@@ -314,17 +326,40 @@ $('#addClientBtn').onclick=()=>{
     closeSheet();toast('Source added ✓');refresh();
   });
 };
+async function editRecord(store,recordId){
+  if(!['expenses','income'].includes(store))return;
+  const record=await DB.get(store,recordId);if(!record){toast('This record has already been deleted');await refresh();return;}
+  const expense=store==='expenses',clients=expense?[]:await DB.all('clients');
+  openSheet(`<button class="close-x" onclick="closeSheet()">✕</button><h2>Edit ${expense?'Expense':'Income'}</h2>
+    <label class="field-label" for="editAmount">Amount (₹)</label><input class="text-input" id="editAmount" type="number" min="0.01" step="0.01" inputmode="decimal">
+    ${expense?`<label class="field-label" for="editDescription">Description</label><input class="text-input" id="editDescription" maxlength="1000"><label class="field-label" for="editCategory">Category</label><select class="text-input" id="editCategory">${CATEGORIES.map(c=>`<option value="${c.id}">${esc(c.label)}</option>`).join('')}</select>`:`<label class="field-label" for="editSource">Source</label><select class="text-input" id="editSource">${clients.filter(c=>!c.archived||c.id===record.clientId).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select><label class="field-label" for="editThumbnails">Thumbnails delivered</label><input class="text-input" id="editThumbnails" type="number" min="1" step="1" inputmode="numeric">`}
+    <p class="note">Recorded ${fmtDate(record.date)}. The original timestamp is kept.${expense?' Linked subscription payment amounts update too; deleting the latest payment makes that cycle due again.':''}</p>
+    ${expense&&Inbox.isSender()?'<p class="note">Changes affect this browser only, not copies already sent to the app. Queued transfers are cancelled where possible; an upload already in progress may complete. Use existing-expense recovery to send an edited record.</p>':''}
+    <div class="editor-actions"><button class="primary-btn" id="saveRecord">Save Changes</button><button class="ghost-btn danger-btn" id="deleteRecord">Delete ${expense?'Expense':'Income'}…</button></div>`);
+  $('#editAmount').value=record.amount;
+  if(expense){$('#editDescription').value=record.description;$('#editCategory').value=record.category;}
+  else{$('#editSource').value=record.clientId;$('#editThumbnails').value=record.thumbnails;}
+  $('#saveRecord').onclick=guardSubmission($('#saveRecord'),async()=>{
+    const amount=Number($('#editAmount').value);if(!Number.isFinite(amount)||amount<=0||amount>1e12){toast('Enter a valid positive amount');return;}
+    const next={...record,amount};
+    if(expense){next.description=$('#editDescription').value.trim();next.category=$('#editCategory').value;if(!next.description||!CATEGORIES.some(c=>c.id===next.category)){toast('Enter a description and category');return;}}
+    else{next.clientId=$('#editSource').value;next.thumbnails=Number($('#editThumbnails').value);if(!next.clientId||!Number.isInteger(next.thumbnails)||next.thumbnails<=0){toast('Choose a source and positive thumbnail count');return;}}
+    await DB.changeRecord(store,record,next);closeSheet();await refresh();toast('Changes saved');
+  });
+  $('#deleteRecord').onclick=()=>{
+    openSheet(`<button class="close-x" onclick="closeSheet()">✕</button><h2>Delete ${expense?'expense':'income'}?</h2><p class="sub">Permanently delete ${fmtINR(record.amount)}${expense?' · '+esc(record.description):''}? All totals will update. This cannot be undone.${expense?' Any linked payment is removed; only the latest subscription cycle is reopened.':''}</p><button class="ghost-btn danger-btn" id="confirmDeleteRecord">Delete ${expense?'Expense':'Income'}</button>`);
+    $('#confirmDeleteRecord').onclick=guardSubmission($('#confirmDeleteRecord'),async()=>{await DB.changeRecord(store,record,null);closeSheet();await refresh();await syncReminderMetadata();toast('Record deleted');});
+  };
+}
 async function manageSources(){
-  const clients=await DB.all('clients');
-  openSheet(`<button class="close-x" onclick="closeSheet()">✕</button><h2>Manage Sources</h2><p class="sub">Removing a source keeps its income history. Restore it here anytime.</p><div class="source-list">${clients.map(c=>`<div class="source-row"><span>${esc(c.name)}${c.archived?' <small>Removed</small>':''}</span><button class="ghost-btn" data-source="${esc(c.id)}">${c.archived?'Restore':'Remove'}</button></div>`).join('')||'<p class="empty">No sources yet.</p>'}</div>`);
+  const clients=await DB.all('clients'),income=await DB.all('income');
+  openSheet(`<button class="close-x" onclick="closeSheet()">✕</button><h2>Manage Sources</h2><div class="source-list">${clients.map(c=>`<div class="source-row"><span>${esc(c.name)}${c.archived?' <small>Previously removed</small>':''}</span><button class="ghost-btn danger-btn" data-source="${esc(c.id)}">Delete</button></div>`).join('')||'<p class="empty">No sources yet.</p>'}</div>`);
   document.querySelectorAll('[data-source]').forEach(b=>b.onclick=()=>{
-    const source=clients.find(c=>c.id===b.dataset.source);
-    if(source.archived){restoreSource(source);return;}
-    openSheet(`<button class="close-x" onclick="closeSheet()">✕</button><h2>Remove ${esc(source.name)}?</h2><p class="sub">It will no longer appear when adding income. Existing income, totals and backups stay unchanged.</p><button class="primary-btn" id="removeSource">Remove Source</button>`);
-    $('#removeSource').onclick=guardSubmission($('#removeSource'),async()=>{await DB.put('clients',{...source,archived:true});await refresh();await manageSources();});
+    const source=clients.find(c=>c.id===b.dataset.source),linked=income.filter(x=>x.clientId===source.id);
+    openSheet(`<button class="close-x" onclick="closeSheet()">✕</button><h2>Delete ${esc(source.name)}?</h2><p class="sub">Permanently delete this source and all its income records (${linked.length}, ${fmtINR(linked.reduce((sum,x)=>sum+x.amount,0))}). Dashboard, balance and income totals will update. This cannot be undone; export a backup first if needed.</p><button class="ghost-btn danger-btn" id="removeSource">Delete Source &amp; Income</button>`);
+    $('#removeSource').onclick=guardSubmission($('#removeSource'),async()=>{await DB.deleteSource(source.id);if(state.incClient===source.id)state.incClient='all';await refresh();await manageSources();toast('Source and linked income deleted');});
   });
 }
-async function restoreSource(source){await DB.put('clients',{...source,archived:false});await refresh();await manageSources();}
 $('#manageSourcesBtn').onclick=manageSources;
 $('#addIncomeBtn').onclick=async()=>{
   const clients=(await DB.all('clients')).filter(c=>!c.archived);
@@ -339,7 +374,7 @@ $('#addIncomeBtn').onclick=async()=>{
     const amt=parseFloat($('#incAmt').value), cid=$('#incClient').value, th=Number($('#incThumbs').value);
     if(!Number.isFinite(amt)||amt<=0||!clients.some(c=>c.id===cid)||!Number.isInteger(th)||th<=0){toast('Amount, client & thumbnails are required');return;}
     const now=new Date();
-    await DB.add('income',{id:id(),amount:amt,clientId:cid,thumbnails:th,date:now.toISOString(),month:monthKey(now)});
+    await DB.saveIncome({id:id(),amount:amt,clientId:cid,thumbnails:th,date:now.toISOString(),month:monthKey(now)});
     closeSheet();toast('Income added ✓');refresh();
   });
 };
@@ -446,7 +481,7 @@ function guardSubmission(button,task){
   let busy=false;
   return async()=>{
     if(busy)return;busy=true;button.disabled=true;button.setAttribute('aria-busy','true');
-    try{await task();}catch(error){console.error(error);toast('Could not save. Check device storage and retry.');}
+    try{await task();}catch(error){console.error(error);toast(error?.message?.startsWith('This record changed.')?'This record changed. Close and reopen it before retrying.':'Could not save. The record or source may have changed; reopen it and retry.');}
     finally{busy=false;button.disabled=false;button.removeAttribute('aria-busy');}
   };
 }

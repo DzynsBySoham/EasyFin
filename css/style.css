@@ -256,3 +256,19 @@ body{overscroll-behavior-y:auto}
 .source-row button{width:auto;margin:0;padding:10px 14px;flex:none}
 @media(max-width:360px){.dock{left:8px;right:8px}.dock-btn{font-size:9px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;animation-iteration-count:1!important}}
+
+/* Keep the last real content above the fixed dock, even when the document is long.
+   Body padding is unreliable when a height:100% body is overflowed by #app on iOS. */
+html{height:auto;min-height:100%;scroll-padding-bottom:var(--nav-clearance,calc(120px + env(safe-area-inset-bottom)))}
+body{height:auto;min-height:100svh;padding-bottom:0}
+#app{min-height:100svh}
+html:not([data-quick-add="true"]) main{padding-bottom:var(--nav-clearance,calc(120px + env(safe-area-inset-bottom)))}
+.txn{flex-wrap:wrap}
+.txn-edit{width:44px;height:44px;display:grid;place-items:center;border-radius:13px;color:var(--muted);background:var(--surface2);flex:none}
+.txn-edit .icon{width:18px;height:18px}
+.txn-actions{display:flex;align-items:center;gap:10px;margin-left:auto;max-width:100%}
+.txn-actions .txn-amt{max-width:130px}
+.danger-btn{color:#c62c45;border:1px solid color-mix(in srgb,currentColor 22%,transparent)}
+[data-theme="dark"] .danger-btn{color:#ff8194}
+.editor-actions{display:grid;gap:10px;margin-top:20px}
+@media(max-width:360px){.txn-actions{width:100%;justify-content:flex-end}.txn-main{flex-basis:calc(100% - 54px)}}
