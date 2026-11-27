@@ -60,9 +60,9 @@ DB.paySubscription=async function(subId,expectedDate,viaQuickAdd){
       check.onsuccess=()=>{
         if(check.result)return;
         const now=new Date(),date=now.toISOString();
-        recorded=true;
-        payments.add({id:id(),subscriptionId:sub.id,cycleKey:cycle,billingDate:sub.nextBillingDate,amount:sub.amount,status:'paid',paidAt:date,via:viaQuickAdd?'quick-add':'slide'});
-        t.objectStore('expenses').add({id:id(),amount:sub.amount,description:sub.name,category:'subscriptions',date,month:monthKey(now)});
+        recorded=true;const expenseId=id();
+        payments.add({id:id(),expenseId,subscriptionId:sub.id,cycleKey:cycle,billingDate:sub.nextBillingDate,amount:sub.amount,status:'paid',paidAt:date,via:viaQuickAdd?'quick-add':'slide'});
+        t.objectStore('expenses').add({id:expenseId,amount:sub.amount,description:sub.name,category:'subscriptions',date,month:monthKey(now)});
         subs.put({...sub,nextBillingDate:nextBillingDate(sub.billingDay,sub.nextBillingDate)});
       };
     };
@@ -111,6 +111,7 @@ DB.importInboxExpense=async function(expense,digest){
     const q=ex.get(expense.id);q.onsuccess=()=>{
       const existing=q.result,r=receipts.get(expense.id);
       r.onsuccess=()=>{
+        if(r.result&&!existing){if(r.result.digest!==digest){t.abort();return;}return;}
         if(existing){
           const same=r.result?r.result.digest===digest:['amount','description','category','date','month'].every(k=>existing[k]===expense[k]);
           if(!same){t.abort();return;}receipts.put({id:expense.id,digest});return;
@@ -123,9 +124,65 @@ DB.importInboxExpense=async function(expense,digest){
           const cycle=cycleKey(sub.id,sub.nextBillingDate),paid=pays.index('byCycle').get(cycle);
           paid.onsuccess=()=>{
             if(paid.result){commit(false);return;}
-            pays.add({id:'inbox-'+expense.id,subscriptionId:sub.id,cycleKey:cycle,billingDate:sub.nextBillingDate,amount:sub.amount,status:'paid',paidAt:expense.date,via:'quick-add-inbox'});
+            pays.add({id:'inbox-'+expense.id,expenseId:expense.id,subscriptionId:sub.id,cycleKey:cycle,billingDate:sub.nextBillingDate,amount:sub.amount,status:'paid',paidAt:expense.date,via:'quick-add-inbox'});
             subs.put({...sub,nextBillingDate:nextBillingDate(sub.billingDay,sub.nextBillingDate)});commit(true);
           };
+        };
+      };
+    };
+  });
+};
+
+// Source and all linked income are deleted together, including previously archived sources.
+DB.deleteSource=async function(sourceId){
+  const db=await openDB();return new Promise((resolve,reject)=>{
+    const t=db.transaction(['clients','income'],'readwrite'),income=t.objectStore('income');
+    t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Source deletion failed'));
+    t.objectStore('clients').delete(sourceId);
+    const q=income.openCursor();q.onsuccess=()=>{const cursor=q.result;if(!cursor)return;if(cursor.value.clientId===sourceId)cursor.delete();cursor.continue();};
+  });
+};
+DB.saveIncome=async function(record){
+  const db=await openDB();return new Promise((resolve,reject)=>{
+    const t=db.transaction(['clients','income'],'readwrite');
+    t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('Source no longer available'));
+    const q=t.objectStore('clients').get(record.clientId);q.onsuccess=()=>{if(!q.result||q.result.archived){t.abort();return;}t.objectStore('income').add(record);};
+  });
+};
+// Optimistic record check prevents stale sheets/tabs resurrecting deleted/changed records.
+DB.changeRecord=async function(store,expected,next){
+  if(!['expenses','income'].includes(store))throw new Error('Invalid store');
+  const db=await openDB();return new Promise((resolve,reject)=>{
+    const names=store==='income'?['income','clients']:['expenses','quickAddOutbox','quickAddReceipts','subscriptions','subscriptionPayments'];
+    const t=db.transaction(names,'readwrite'),records=t.objectStore(store);
+    t.oncomplete=resolve;t.onerror=()=>reject(t.error);t.onabort=()=>reject(t.error||new Error('This record changed. Close and reopen it before retrying.'));
+    const q=records.get(expected.id);q.onsuccess=()=>{
+      if(!q.result||JSON.stringify(q.result)!==JSON.stringify(expected)){t.abort();return;}
+      if(next&&(next.id!==expected.id||next.date!==expected.date||next.month!==expected.month||!Number.isFinite(next.amount)||next.amount<=0)){t.abort();return;}
+      const write=()=>{if(next)records.put(next);else records.delete(expected.id);};
+      if(store==='income'){
+        if(!next){write();return;}
+        const c=t.objectStore('clients').get(next.clientId);c.onsuccess=()=>{if(!c.result||!Number.isInteger(next.thumbnails)||next.thumbnails<=0){t.abort();return;}write();};return;
+      }
+      if(next&&(!next.description?.trim()||next.description.length>1000||!CATEGORIES.some(c=>c.id===next.category))){t.abort();return;}
+      // Never allow a stale unsent copy to transfer after a local correction/deletion.
+      t.objectStore('quickAddOutbox').delete(expected.id);
+      // Keep the original receipt: relay retries must not resurrect a deleted imported expense.
+      const subs=t.objectStore('subscriptions'),payments=t.objectStore('subscriptionPayments'),sq=subs.getAll();
+      sq.onsuccess=()=>{
+        const pq=payments.getAll();pq.onsuccess=()=>{
+          const linked=pq.result.filter(p=>p.expenseId===expected.id||(!p.expenseId&&p.paidAt===expected.date&&Number(p.amount)===expected.amount&&sq.result.some(s=>s.id===p.subscriptionId&&s.name.trim()===expected.description.trim())));
+          // Legacy records had no expenseId; do not guess if the match is ambiguous.
+          if(linked.length>1){t.abort();return;}
+          for(const payment of linked){
+            if(next)payments.put({...payment,expenseId:expected.id,amount:next.amount});
+            else{
+              payments.delete(payment.id);
+              const sub=sq.result.find(s=>s.id===payment.subscriptionId);
+              if(sub&&sub.nextBillingDate===nextBillingDate(sub.billingDay,payment.billingDate))subs.put({...sub,nextBillingDate:payment.billingDate});
+            }
+          }
+          write();
         };
       };
     };
