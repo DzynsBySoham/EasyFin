@@ -37,7 +37,7 @@ const Inbox=(()=>{
   }
   function notice(){
     const node=document.getElementById('quickInboxNotice');if(!node)return;
-    node.hidden=!config&&!browserOnIOS();
+    node.hidden=true; // Temporarily hide the inline Safari/inbox guidance; settings remain available.
     if(node.hidden)return;
     const text=document.getElementById('quickInboxText');
     text.textContent=lastMessage||(config?.role==='sender'?'Connected to app inbox. Open the Home Screen app to import sent expenses.':config?.role==='receiver'?'App inbox connected. Expenses import when this app is open.':'This is Safari, not the Home Screen app. Without pairing, saves stay in this browser.');
